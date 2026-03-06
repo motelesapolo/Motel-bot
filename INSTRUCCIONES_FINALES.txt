@@ -1,0 +1,79 @@
+═══════════════════════════════════════════════════════
+  INSTRUCCIONES PARA OBTENER EL GOOGLE REFRESH TOKEN
+  Motel Apolo / Le Chateau
+═══════════════════════════════════════════════════════
+
+Este es el ÚNICO paso que falta para que el bot funcione
+al 100% con Google Calendar.
+
+PASOS:
+──────
+
+1. Abre una terminal (CMD en Windows o Terminal en Mac)
+
+2. Entra a la carpeta del bot:
+   cd whatsapp-bot
+
+3. Instala las dependencias (si no lo has hecho):
+   npm install
+
+4. Ejecuta el script de configuración:
+   node setup-google.js
+
+5. Se mostrará un enlace largo en la pantalla.
+   Cópialo y ábrelo en tu navegador.
+
+6. Inicia sesión con la cuenta de Google del motel
+   y acepta los permisos.
+
+7. Aparecerá un código en pantalla. Cópialo y
+   pégalo de vuelta en la terminal.
+
+8. Verás algo como:
+   GOOGLE_REFRESH_TOKEN=1//04xxxxxxxxxxxxxxxxxxx
+
+9. Abre el archivo .env (está en la carpeta del bot)
+   y reemplaza la línea:
+   GOOGLE_REFRESH_TOKEN=PENDIENTE_VER_INSTRUCCIONES
+   
+   por:
+   GOOGLE_REFRESH_TOKEN=1//04xxxxxxxxxxxxxxxxxxx
+   (el que te dio el script)
+
+10. ¡Listo! Ahora puedes iniciar el bot con:
+    npm start
+
+══════════════════════════════════════════════════════
+  INICIAR EL BOT
+══════════════════════════════════════════════════════
+
+1. npm start
+2. Aparece un QR en la terminal
+3. Abre WhatsApp en tu celular
+4. Tres puntos (⋮) → Dispositivos vinculados → Vincular dispositivo
+5. Escanea el QR
+6. ¡El bot está activo!
+
+Cada vez que reinicies el servidor, la sesión de
+WhatsApp se recuerda automáticamente (no necesitas
+escanear el QR nuevamente).
+
+══════════════════════════════════════════════════════
+  COMANDOS ADMIN (desde tu WhatsApp +56949716039)
+══════════════════════════════════════════════════════
+
+/estado  → Ver si el bot está activo
+/limpiar → Reiniciar tu conversación
+
+══════════════════════════════════════════════════════
+  ⚠️  SEGURIDAD IMPORTANTE
+══════════════════════════════════════════════════════
+
+Tu Anthropic API Key fue compartida en el chat.
+Por seguridad, genera una nueva en:
+https://console.anthropic.com → API Keys → Create Key
+
+Luego actualiza la línea en el .env:
+ANTHROPIC_API_KEY=sk-ant-...nueva...
+
+══════════════════════════════════════════════════════
