@@ -3,24 +3,68 @@
 // ============================================
 require('dotenv').config();
 const { Client, LocalAuth } = require('whatsapp-web.js');
-const qrcode = require('qrcode-terminal');
 const express = require('express');
 const { procesarMensaje, limpiarConversacion } = require('./ia');
 const { iniciarRecordatorios } = require('./recordatorios');
 
-// ── Servidor Express (necesario para Railway/Render) ─────────
+// ── Servidor Express ─────────────────────────────────────────
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// QR guardado en memoria para mostrarlo en la web
+let qrActual = null;
+let botConectado = false;
+
 app.get('/', (req, res) => {
-  res.json({
-    status: '✅ Bot activo',
-    motel: process.env.MOTEL_NOMBRE,
-    timestamp: new Date().toLocaleString('es-CL', { timeZone: 'America/Santiago' }),
-  });
+  if (botConectado) {
+    res.send(`
+      <html><body style="font-family:sans-serif;text-align:center;padding:50px;background:#111;color:#fff">
+        <h1>✅ Bot Conectado</h1>
+        <p>El bot está activo y recibiendo mensajes.</p>
+        <p>${process.env.MOTEL_NOMBRE}</p>
+      </body></html>
+    `);
+  } else if (qrActual) {
+    res.send(`
+      <html>
+      <head>
+        <title>Escanear QR - Bot Motel</title>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+        <style>
+          body { font-family:sans-serif; text-align:center; padding:30px; background:#111; color:#fff; }
+          #qrcode { display:inline-block; background:#fff; padding:20px; border-radius:10px; margin:20px; }
+          h2 { color:#25D366; }
+          p { color:#aaa; }
+        </style>
+      </head>
+      <body>
+        <h2>📱 Escanea este QR con WhatsApp</h2>
+        <p>WhatsApp → tres puntos → Dispositivos vinculados → Vincular dispositivo</p>
+        <div id="qrcode"></div>
+        <p style="color:#ff9800">⚠️ El QR expira en 60 segundos. Recarga la página si no funciona.</p>
+        <script>
+          new QRCode(document.getElementById("qrcode"), {
+            text: "${qrActual}",
+            width: 300,
+            height: 300,
+            colorDark: "#000000",
+            colorLight: "#ffffff",
+          });
+        </script>
+      </body></html>
+    `);
+  } else {
+    res.send(`
+      <html><body style="font-family:sans-serif;text-align:center;padding:50px;background:#111;color:#fff">
+        <h1>⏳ Iniciando bot...</h1>
+        <p>Espera unos segundos y recarga la página.</p>
+        <script>setTimeout(()=>location.reload(), 3000)</script>
+      </body></html>
+    `);
+  }
 });
 
-app.get('/health', (req, res) => res.json({ ok: true }));
+app.get('/health', (req, res) => res.json({ ok: true, conectado: botConectado }));
 
 app.listen(PORT, () => {
   console.log(`🌐 Servidor web activo en puerto ${PORT}`);
@@ -28,9 +72,7 @@ app.listen(PORT, () => {
 
 // ── Cliente de WhatsApp ───────────────────────────────────────
 const cliente = new Client({
-  authStrategy: new LocalAuth({
-    dataPath: './session',
-  }),
+  authStrategy: new LocalAuth({ dataPath: './session' }),
   puppeteer: {
     headless: true,
     executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
@@ -47,99 +89,72 @@ const cliente = new Client({
   },
 });
 
-// ── Eventos del Cliente ───────────────────────────────────────
-
-// Mostrar QR para conectar WhatsApp
+// ── Eventos ───────────────────────────────────────────────────
 cliente.on('qr', (qr) => {
-  console.log('\n📱 Escanea este QR con tu WhatsApp:');
-  console.log('   (WhatsApp > Dispositivos vinculados > Vincular dispositivo)\n');
-  qrcode.generate(qr, { small: true });
+  console.log('📱 QR generado - abre la URL del servicio en Railway para escanearlo');
+  qrActual = qr;
+  botConectado = false;
 });
 
-// Autenticación exitosa
 cliente.on('authenticated', () => {
   console.log('✅ WhatsApp autenticado correctamente');
+  qrActual = null;
 });
 
-// Bot listo
 cliente.on('ready', () => {
-  console.log(`\n🏨 ${process.env.MOTEL_NOMBRE || 'Bot Motel'} - LISTO PARA RECIBIR MENSAJES`);
-  console.log('━'.repeat(50));
+  console.log(`\n🏨 ${process.env.MOTEL_NOMBRE || 'Bot Motel'} - LISTO`);
+  botConectado = true;
+  qrActual = null;
   iniciarRecordatorios(cliente);
 });
 
-// Error de autenticación
 cliente.on('auth_failure', (msg) => {
   console.error('❌ Error de autenticación:', msg);
 });
 
-// Desconexión
 cliente.on('disconnected', (reason) => {
-  console.log('📵 WhatsApp desconectado:', reason);
-  console.log('🔄 Reiniciando en 10 segundos...');
+  console.log('📵 Desconectado:', reason);
+  botConectado = false;
   setTimeout(() => cliente.initialize(), 10000);
 });
 
-// ── Procesamiento de Mensajes ─────────────────────────────────
+// ── Mensajes ──────────────────────────────────────────────────
 cliente.on('message', async (mensaje) => {
-  // Ignorar mensajes de grupos
   if (mensaje.from.includes('@g.us')) return;
-
-  // Ignorar mensajes del propio bot
   if (mensaje.fromMe) return;
-
-  // Ignorar mensajes de estado
   if (mensaje.from === 'status@broadcast') return;
 
   const telefono = mensaje.from.replace('@c.us', '');
   const texto = mensaje.body?.trim();
-
   if (!texto) return;
 
-  console.log(`\n📩 [${new Date().toLocaleTimeString('es-CL')}] De ${telefono}: ${texto}`);
+  console.log(`📩 [${new Date().toLocaleTimeString('es-CL')}] De ${telefono}: ${texto}`);
 
-  // Comandos especiales (solo para admins)
   const ADMIN_NUMERO = process.env.ADMIN_NUMERO || '';
   if (telefono === ADMIN_NUMERO) {
-    if (texto === '/limpiar') {
-      limpiarConversacion(telefono);
-      await mensaje.reply('🧹 Conversación reiniciada.');
-      return;
-    }
-    if (texto === '/estado') {
-      await mensaje.reply(`✅ Bot activo\n🏨 ${process.env.MOTEL_NOMBRE}\n⏰ ${new Date().toLocaleString('es-CL', { timeZone: 'America/Santiago' })}`);
-      return;
-    }
+    if (texto === '/limpiar') { limpiarConversacion(telefono); await mensaje.reply('🧹 Conversación reiniciada.'); return; }
+    if (texto === '/estado') { await mensaje.reply(`✅ Bot activo\n🏨 ${process.env.MOTEL_NOMBRE}\n⏰ ${new Date().toLocaleString('es-CL', { timeZone: 'America/Santiago' })}`); return; }
   }
 
-  // Mostrar indicador de escritura
   const chat = await mensaje.getChat();
   await chat.sendStateTyping();
 
   try {
-    // Procesar mensaje con IA
     const respuesta = await procesarMensaje(telefono, texto);
-
-    // Pequeña pausa para parecer más natural (1-2 segundos)
     const pausa = Math.floor(Math.random() * 1000) + 800;
     await new Promise(r => setTimeout(r, pausa));
-
     await mensaje.reply(respuesta);
     console.log(`📤 Respuesta enviada a ${telefono}`);
-
   } catch (error) {
-    console.error('Error procesando mensaje:', error);
-    await mensaje.reply(
-      '😔 Lo sentimos, ocurrió un error. Por favor intenta nuevamente o contáctanos al ' +
-      (process.env.MOTEL_TELEFONO || 'teléfono directo') + '.'
-    );
+    console.error('Error:', error);
+    await mensaje.reply('😔 Error técnico. Contáctanos al ' + (process.env.MOTEL_TELEFONO || '') + '.');
   } finally {
     await chat.clearState();
   }
 });
 
-// ── Iniciar Cliente ───────────────────────────────────────────
-console.log('🚀 Iniciando bot...');
+// ── Iniciar ───────────────────────────────────────────────────
+console.log(`🚀 Iniciando bot...`);
 console.log(`🏨 Motel: ${process.env.MOTEL_NOMBRE || 'Sin configurar'}`);
 console.log('━'.repeat(50));
 
@@ -148,7 +163,6 @@ cliente.initialize().catch(err => {
   process.exit(1);
 });
 
-// Manejo de errores no capturados
 process.on('unhandledRejection', (reason) => {
   console.error('Error no manejado:', reason);
 });
