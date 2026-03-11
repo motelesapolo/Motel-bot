@@ -156,6 +156,8 @@ SERVICIO DE BAR A LA HABITACIÓN:
 - Corto de vodka (con bebida incluida)
 - Corto de gin (con bebida incluida)
 - Corto de whisky (SIN bebida incluida)
+- Copa de pisco sour
+- Botella de pisco sour
 
 SERVICIO DE COMIDA A LA HABITACIÓN:
 - Pizza familiar
@@ -177,7 +179,10 @@ RESERVAS:
 - Por WhatsApp, presencialmente o por motelesapolo.motelink.cl
 - Si Motelink no funciona, se puede reservar directamente por WhatsApp
 
-CAPACIDAD MÁXIMA: 3 personas por habitación (precio doble)
+POLÍTICA DE SALIDAS:
+- Habitaciones por momento (3h), por noche y por 12 horas: NO se puede salir y volver a entrar. Una vez que se sale, se termina la estadía.
+- Habitaciones por 24 horas: SÍ se puede salir y volver a entrar durante el período contratado.
+- Solo mencionar el máximo de 3 personas por habitación si el cliente lo pregunta explícitamente. No mencionarlo de forma proactiva.
 
 DECORACIONES: No contamos con decoraciones propias, pero si el cliente llama al motel puede coordinar para ir antes y hacer la decoración él mismo.
 
@@ -185,7 +190,8 @@ ESTACIONAMIENTO: Gratuito para clientes, privado, en Marín 021. Por orden de ll
 
 AGUA CALIENTE: Todas las habitaciones tienen agua caliente.
 
-MEDIOS DE PAGO: El pago se realiza al llegar a recepción. Se acepta efectivo, tarjeta de débito y tarjeta de crédito.
+MEDIOS DE PAGO: El pago se realiza al llegar a recepción. Se acepta efectivo, tarjeta de débito y tarjeta de crédito. NO se aceptan transferencias bancarias.
+- Solo si el cliente pregunta explícitamente: se puede pagar una parte en efectivo y otra con tarjeta (débito o crédito), pero NO con transferencia.
 
 HORAS EXTRAS:
 - Se pueden solicitar máximo 2 horas extras por estadía
@@ -199,11 +205,21 @@ ANEXOS DE RECEPCIÓN (para llamar directamente):
 
 EDAD MÍNIMA: Nuestro servicio es exclusivo para mayores de 18 años. No se permite el ingreso a menores de edad.
 
+COMIDA Y BEBIDAS EXTERNAS (solo mencionar si el cliente pregunta):
+- Los pasajeros pueden traer su propia comida y bebidas si lo desean.
+- También pueden pedir delivery a la habitación si lo desean.
+
 TIEMPO DE ESPERA DE RESERVA: La reserva se espera durante 30 minutos desde la hora acordada. Pasado ese tiempo, la habitación puede quedar disponible para otro cliente.
 
 NÚMERO DE HABITACIÓN: No se asigna número de habitación al momento de la reserva. El número se asigna al llegar a recepción según disponibilidad. Si el cliente desea una habitación específica, debe llamar directamente al motel.
 
 ESTACIONAMIENTO: No se puede reservar estacionamiento, es por orden de llegada y gratuito para clientes.
+
+CARTA DE PRECIOS:
+- Si el cliente pide la carta, el menú, los precios en PDF o similar, envíale este enlace:
+  https://drive.google.com/file/d/1xSV-35fgK19uEE8GBuBOStWKQlsygMDd/view?usp=drivesdk
+- Puedes decirle algo como: "Aquí te dejo nuestra carta de precios 😊 [enlace]"
+- Solo enviar el enlace si el cliente lo pide explícitamente.
 
 RECLAMOS: servicioalcliente@motelesapolo.cl (lunes a viernes 9:00 a 17:00 hrs)
 
@@ -233,7 +249,7 @@ Luego incluye este bloque especial al final:
 5. Preguntar cuántas personas
 6. Preguntar fecha y hora de llegada
 7. Verificar disponibilidad
-8. Pedir nombre del cliente
+8. Pedir nombre completo del cliente (nombre y apellido)
 9. Confirmar datos completos con precio correcto
 10. Crear reserva y entregar el N° de reserva de 6 dígitos (NO mencionar número de habitación - se asigna al llegar)
 
@@ -263,7 +279,7 @@ TIPOS VÁLIDOS:
 
 REGLAS:
 - Verifica disponibilidad ANTES de confirmar
-- Si son 3 personas, el precio es el doble
+- Si son 3 personas, el precio es el doble (solo mencionarlo si el cliente pregunta por capacidad o precio para 3 personas)
 - Aplica tarifa finde si la llegada es viernes o sábado
 - Si no hay disponibilidad, ofrece el otro motel o un horario alternativo`;
 }
@@ -314,7 +330,7 @@ async function notificarAdmin(telefono, mensaje, motivo) {
 // ── Notificar al celular de la empresa cuando se crea reserva ─
 const EMPRESA_NUMERO = '56945676410';
 
-async function notificarEmpresa(datos, result, tipo, precio, duracionHoras) {
+async function notificarEmpresa(datos, result, tipo, precio, duracionHoras, telefono) {
   if (!clienteWhatsApp) return;
   try {
     const chatId = `${EMPRESA_NUMERO}@c.us`;
@@ -373,7 +389,7 @@ async function procesarAccion(accion, datos, telefono) {
       if (result.ok) {
         reservasEnProgreso.set(telefono, result.id);
         // Notificar al celular de la empresa
-        await notificarEmpresa(datos, result, tipo, precio, duracionHoras);
+        await notificarEmpresa(datos, result, tipo, precio, duracionHoras, telefono);
       }
       return `RESULTADO_RESERVA: ${JSON.stringify({ ...result, precio })}`;
     }
