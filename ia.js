@@ -6,7 +6,6 @@ const Anthropic = require('@anthropic-ai/sdk');
 const {
   crearReserva,
   consultarDisponibilidad,
-  obtenerHabitacionDisponible,
   cancelarReserva,
 } = require('./reservas');
 require('dotenv').config();
@@ -34,19 +33,22 @@ function getSaludo() {
 
 // ── System Prompt completo ────────────────────────────────────
 function getSystemPrompt() {
-  const ahoraStr = new Date().toLocaleString('es-CL', {
+  const ahora = new Date();
+  const ahoraStr = ahora.toLocaleString('es-CL', {
     timeZone: 'America/Santiago',
     weekday: 'long', year: 'numeric', month: 'long',
     day: 'numeric', hour: '2-digit', minute: '2-digit',
   });
-  const diaSemana = new Date().getDay();
+  const diaSemana = ahora.getDay();
   const esFinde = diaSemana === 5 || diaSemana === 6;
   const tarifaHoy = esFinde ? 'FIN DE SEMANA / VÍSPERA DE FESTIVO' : 'SEMANA (domingo a jueves)';
+  const anioActual = ahora.getFullYear();
   const saludo = getSaludo();
 
   return `Eres el asistente virtual de Motel Apolo y Motel Le Chateau, dos moteles para adultos ubicados en Providencia, Santiago de Chile. Atiendes 24/7 por WhatsApp.
 
 FECHA Y HORA ACTUAL: ${ahoraStr}
+AÑO ACTUAL: ${anioActual} — usa siempre este año al interpretar fechas. Si el cliente dice "el sábado 14" busca el próximo sábado 14 en el calendario de ${anioActual}.
 TARIFA VIGENTE HOY: ${tarifaHoy}
 SALUDO A USAR: "${saludo}, ¿en qué podemos ayudarte? 😊"
 
@@ -183,6 +185,26 @@ ESTACIONAMIENTO: Gratuito para clientes, privado, en Marín 021. Por orden de ll
 
 AGUA CALIENTE: Todas las habitaciones tienen agua caliente.
 
+MEDIOS DE PAGO: El pago se realiza al llegar a recepción. Se acepta efectivo, tarjeta de débito y tarjeta de crédito.
+
+HORAS EXTRAS:
+- Se pueden solicitar máximo 2 horas extras por estadía
+- Precio por hora extra: Simple $5.000 | VIP $6.000 | Jacuzzi $7.000
+- Si quieren quedarse más de 2 horas extra, deben pagar una estadía completa (momento 3h, 12h o 24h)
+- También pueden usar la promoción 6x3 para esto
+
+ANEXOS DE RECEPCIÓN (para llamar directamente):
+- Motel Apolo: Anexo 710
+- Motel Le Chateau: Anexo 210
+
+EDAD MÍNIMA: Nuestro servicio es exclusivo para mayores de 18 años. No se permite el ingreso a menores de edad.
+
+TIEMPO DE ESPERA DE RESERVA: La reserva se espera durante 30 minutos desde la hora acordada. Pasado ese tiempo, la habitación puede quedar disponible para otro cliente.
+
+NÚMERO DE HABITACIÓN: No se asigna número de habitación al momento de la reserva. El número se asigna al llegar a recepción según disponibilidad. Si el cliente desea una habitación específica, debe llamar directamente al motel.
+
+ESTACIONAMIENTO: No se puede reservar estacionamiento, es por orden de llegada y gratuito para clientes.
+
 RECLAMOS: servicioalcliente@motelesapolo.cl (lunes a viernes 9:00 a 17:00 hrs)
 
 CONTACTO DIRECTO: +56 9 4567 6410
@@ -213,7 +235,7 @@ Luego incluye este bloque especial al final:
 7. Verificar disponibilidad
 8. Pedir nombre del cliente
 9. Confirmar datos completos con precio correcto
-10. Crear reserva y entregar número de habitación
+10. Crear reserva y entregar el N° de reserva de 6 dígitos (NO mencionar número de habitación - se asigna al llegar)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🔧 ACCIONES DEL SISTEMA
@@ -270,21 +292,55 @@ async function notificarAdmin(telefono, mensaje, motivo) {
   if (!clienteWhatsApp || !ADMIN_NUMERO) return;
   try {
     const chatId = `${ADMIN_NUMERO}@c.us`;
+    const numeroLegible = telefono.startsWith('56') ? `+${telefono}` : `+56${telefono}`;
     const texto = [
       `⚠️ *ATENCIÓN REQUERIDA*`,
       ``,
-      `📱 Cliente: +${telefono}`,
+      `📱 Responder a: ${numeroLegible}`,
       `💬 Motivo: ${motivo}`,
       `📝 Último mensaje: "${mensaje}"`,
       ``,
-      `El bot ha pausado las respuestas a este cliente.`,
-      `Respóndele directamente en WhatsApp.`,
-      `Cuando termines, escribe /resume_cliente ${telefono} para reactivar el bot con ese cliente.`,
+      `El bot pausó las respuestas a este cliente.`,
+      `Escríbele directamente a ${numeroLegible} en WhatsApp.`,
+      `Cuando termines, escribe /activar_cliente ${telefono}`,
     ].join('\n');
     await clienteWhatsApp.sendMessage(chatId, texto);
     console.log(`📨 Admin notificado sobre cliente ${telefono}`);
   } catch (err) {
     console.error('Error notificando admin:', err.message);
+  }
+}
+
+// ── Notificar al celular de la empresa cuando se crea reserva ─
+const EMPRESA_NUMERO = '56945676410';
+
+async function notificarEmpresa(datos, result, tipo, precio, duracionHoras) {
+  if (!clienteWhatsApp) return;
+  try {
+    const chatId = `${EMPRESA_NUMERO}@c.us`;
+    const tipoLabel = tipo.replace(/_/g, ' ').replace('semana','(semana)').replace('finde','(fin de semana)');
+    const inicio = new Date(result.inicio);
+    const fin = new Date(result.fin);
+    const opFecha = { timeZone: 'America/Santiago', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+    
+    const texto = [
+      `📋 *NUEVA RESERVA #${result.id}*`,
+      ``,
+      `🏨 Motel: ${datos.motel || 'Apolo'}`,
+      `👤 Cliente: ${datos.nombre}`,
+      `📱 Teléfono: +${datos.telefono || telefono}`,
+      `🛏️ Tipo: ${tipoLabel}`,
+      `👥 Personas: ${datos.personas || 1}`,
+      `💰 Precio: $${precio.toLocaleString('es-CL')} CLP`,
+      `🕐 Llegada: ${inicio.toLocaleString('es-CL', opFecha)}`,
+      `🕑 Salida est.: ${fin.toLocaleString('es-CL', opFecha)}`,
+      `⏳ Esperar hasta: 30 min después de la llegada`,
+    ].join('\n');
+    
+    await clienteWhatsApp.sendMessage(chatId, texto);
+    console.log(`📨 Notificación de reserva enviada a empresa`);
+  } catch (err) {
+    console.error('Error notificando empresa:', err.message);
   }
 }
 
@@ -300,21 +356,26 @@ async function procesarAccion(accion, datos, telefono) {
       const duracionHoras = DURACIONES[tipo] || 3;
       let precio = PRECIOS[tipo] || 27000;
       if (datos.personas === 3) precio = precio * 2;
-      const habitacion = await obtenerHabitacionDisponible(datos.fechaInicio, duracionHoras);
-      if (!habitacion) {
-        return 'RESULTADO_RESERVA: {"ok": false, "error": "Sin habitaciones disponibles"}';
+      const disp = await consultarDisponibilidad(datos.fechaInicio, duracionHoras);
+      if (!disp.hayDisponibilidad) {
+        return 'RESULTADO_RESERVA: {"ok": false, "error": "Sin disponibilidad en ese horario"}';
       }
+      const tipoLabel = tipo.replace(/_/g, ' ').replace('semana','(semana)').replace('finde','(fin de semana)');
       const result = await crearReserva({
         nombre: datos.nombre,
         telefono: datos.telefono || telefono,
-        tipo: tipo.replace(/_/g, ' '),
+        tipo: tipoLabel,
         fechaInicio: datos.fechaInicio,
-        habitacion,
         motel: datos.motel || 'Apolo',
         precio,
+        duracionHoras,
       });
-      if (result.ok) reservasEnProgreso.set(telefono, result.id);
-      return `RESULTADO_RESERVA: ${JSON.stringify({ ...result, habitacion, precio })}`;
+      if (result.ok) {
+        reservasEnProgreso.set(telefono, result.id);
+        // Notificar al celular de la empresa
+        await notificarEmpresa(datos, result, tipo, precio, duracionHoras);
+      }
+      return `RESULTADO_RESERVA: ${JSON.stringify({ ...result, precio })}`;
     }
     case 'cancelar_reserva': {
       const result = await cancelarReserva(datos.reservaId);

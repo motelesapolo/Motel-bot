@@ -86,18 +86,18 @@ cliente.on('message', async (mensaje) => {
 
   // ── Comandos Admin ────────────────────────────────────────
   if (telefono === ADMIN_NUMERO) {
-    if (texto === '/pause') {
+    if (texto === '/desactivar') {
       botPausado = true;
-      await mensaje.reply('⏸️ *Bot pausado globalmente.* Responde tú manualmente.\nEscribe /resume para reactivar.');
+      await mensaje.reply('⏸️ *Bot pausado globalmente.* Responde tú manualmente.\nEscribe /activar para reactivar.');
       return;
     }
-    if (texto === '/resume') {
+    if (texto === '/activar') {
       botPausado = false;
       await mensaje.reply('▶️ *Bot reactivado.* Vuelve a responder automáticamente.');
       return;
     }
     if (texto === '/estado') {
-      await mensaje.reply(`${botPausado ? '⏸️ PAUSADO' : '✅ ACTIVO'}\n🏨 ${process.env.MOTEL_NOMBRE}\n⏰ ${new Date().toLocaleString('es-CL', { timeZone: 'America/Santiago' })}\n\nComandos disponibles:\n/pause - Pausar bot\n/resume - Reactivar bot\n/limpiar - Reiniciar tu conversación\n/resume_cliente NUMERO - Reactivar bot para un cliente`);
+      await mensaje.reply(`${botPausado ? '⏸️ PAUSADO' : '✅ ACTIVO'}\n🏨 ${process.env.MOTEL_NOMBRE}\n⏰ ${new Date().toLocaleString('es-CL', { timeZone: 'America/Santiago' })}\n\nComandos disponibles:\n/desactivar - Pausar bot\n/activar - Reactivar bot\n/limpiar - Reiniciar tu conversación\n/activar_cliente NUMERO - Reactivar bot para un cliente`);
       return;
     }
     if (texto === '/limpiar') {
@@ -106,7 +106,7 @@ cliente.on('message', async (mensaje) => {
       return;
     }
     // Reactivar bot para cliente específico
-    if (texto.startsWith('/resume_cliente')) {
+    if (texto.startsWith('/activar_cliente')) {
       const numeroCliente = texto.split(' ')[1];
       if (numeroCliente) {
         reactivarCliente(numeroCliente);
