@@ -180,6 +180,12 @@ RESERVAS:
 - Por WhatsApp, presencialmente o por motelesapolo.motelink.cl
 - Si Motelink no funciona, se puede reservar directamente por WhatsApp
 
+CAPACIDAD DE HABITACIONES:
+- Motel Apolo: Simple 6 | VIP 3 | Jacuzzi 2
+- Motel Le Chateau: Simple 7 | VIP 5 | Jacuzzi 2
+- Si no hay disponibilidad para el tipo/motel solicitado, ofrecer el otro motel o un horario diferente
+- Si tampoco hay disponibilidad en el otro motel, decir: "Lo sentimos, no tenemos disponibilidad para ese horario. Te invitamos a llamarnos directamente al +56 9 4567 6410 (Apolo anexo 710 / Le Chateau anexo 210) para revisar opciones o hablar con un agente."
+
 POLÍTICA DE SALIDAS:
 - Habitaciones por momento (3h), por noche y por 12 horas: NO se puede salir y volver a entrar. Una vez que se sale, se termina la estadía.
 - Habitaciones por 24 horas: SÍ se puede salir y volver a entrar durante el período contratado.
@@ -259,7 +265,7 @@ NOTA: NO preguntar cuántas personas. Asumir que son 2. Solo mencionar precio pa
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 [ACCION:verificar_disponibilidad]
-{"fechaInicio": "2025-03-05T22:00:00", "duracionHoras": 3}
+{"fechaInicio": "2026-03-05T22:00:00", "duracionHoras": 3, "motel": "Apolo", "tipo": "simple"}
 [/ACCION]
 
 [ACCION:crear_reserva]
@@ -313,13 +319,13 @@ async function notificarAdmin(telefono, mensaje, motivo) {
     const texto = [
       `⚠️ *ATENCIÓN REQUERIDA*`,
       ``,
-      `📱 Responder a: ${numeroLegible}`,
+
       `💬 Motivo: ${motivo}`,
       `📝 Último mensaje: "${mensaje}"`,
       ``,
       `El bot pausó las respuestas a este cliente.`,
-      `Escríbele directamente a ${numeroLegible} en WhatsApp.`,
-      `Cuando termines, escribe /activar_cliente ${telefono}`,
+      `Cuando termines de atenderlo, escribe:`,
+      `/activar_cliente ${telefono}`,
     ].join('\n');
     await clienteWhatsApp.sendMessage(chatId, texto);
     console.log(`📨 Admin notificado sobre cliente ${telefono}`);
@@ -345,7 +351,7 @@ async function notificarEmpresa(datos, result, tipo, precio, duracionHoras, tele
       ``,
       `🏨 Motel: ${datos.motel || 'Apolo'}`,
       `👤 Cliente: ${datos.nombre}`,
-      `📱 Teléfono: +${datos.telefono || telefono}`,
+
       `🛏️ Tipo: ${tipoLabel}`,
       `👥 Personas: ${datos.personas || 1}`,
       `💰 Precio: $${precio.toLocaleString('es-CL')} CLP`,
@@ -365,7 +371,7 @@ async function notificarEmpresa(datos, result, tipo, precio, duracionHoras, tele
 async function procesarAccion(accion, datos, telefono) {
   switch (accion) {
     case 'verificar_disponibilidad': {
-      const result = await consultarDisponibilidad(datos.fechaInicio, datos.duracionHoras || 3);
+      const result = await consultarDisponibilidad(datos.fechaInicio, datos.duracionHoras || 3, datos.motel || '', datos.tipo || '');
       return `RESULTADO_DISPONIBILIDAD: ${JSON.stringify(result)}`;
     }
     case 'crear_reserva': {

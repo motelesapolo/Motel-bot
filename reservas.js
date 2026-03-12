@@ -107,11 +107,24 @@ async function crearReserva({ nombre, telefono, tipo, fechaInicio, motel, precio
   }
 }
 
+// ── Capacidad por motel y tipo ───────────────────────────────
+const CAPACIDAD = {
+  Apolo:     { simple: 6, vip: 3, jacuzzi: 2 },
+  LeChateaU: { simple: 7, vip: 5, jacuzzi: 2 },
+};
+
+function getCapacidad(motel, tipoHab) {
+  const m = motel && motel.toLowerCase().includes('chateau') ? 'LeChateaU' : 'Apolo';
+  const t = tipoHab && tipoHab.toLowerCase().includes('jacuzzi') ? 'jacuzzi' :
+            tipoHab && tipoHab.toLowerCase().includes('vip') ? 'vip' : 'simple';
+  return CAPACIDAD[m][t];
+}
+
 // ── Consultar disponibilidad ──────────────────────────────────
-async function consultarDisponibilidad(fechaInicio, duracionHoras = 3) {
+async function consultarDisponibilidad(fechaInicio, duracionHoras = 3, motel = '', tipoHab = '') {
   const inicio = parsearFechaSantiago(fechaInicio);
   const fin = new Date(inicio.getTime() + duracionHoras * 60 * 60 * 1000);
-  const totalHabitaciones = parseInt(process.env.TOTAL_HABITACIONES || 10);
+  const totalHabitaciones = getCapacidad(motel, tipoHab);
 
   try {
     const calendar = getCalendarClient();
@@ -123,7 +136,17 @@ async function consultarDisponibilidad(fechaInicio, duracionHoras = 3) {
       orderBy: 'startTime',
     });
 
-    const eventosActivos = (res.data.items || []).filter(e => e.status !== 'cancelled');
+    const motelFiltro = motel ? motel.toLowerCase() : '';
+    const tipoFiltro = tipoHab ? tipoHab.toLowerCase().split('_')[0] : '';
+
+    const eventosActivos = (res.data.items || []).filter(e => {
+      if (e.status === 'cancelled') return false;
+      const summary = (e.summary || '').toLowerCase();
+      const matchMotel = motelFiltro ? summary.includes(motelFiltro) : true;
+      const matchTipo = tipoFiltro ? summary.includes(tipoFiltro) : true;
+      return matchMotel && matchTipo;
+    });
+
     const ocupadas = eventosActivos.length;
     const disponibles = Math.max(0, totalHabitaciones - ocupadas);
 
