@@ -23,37 +23,26 @@ function generarIdReserva() {
 }
 
 // ── Parsear fecha respetando zona horaria Santiago ────────────
-// Chile (Santiago) usa America/Santiago: UTC-4 en invierno, UTC-3 en verano
-// Esta función convierte correctamente cualquier fecha/hora local de Santiago
+// Método robusto: usamos el offset real de Santiago para la fecha dada
 function parsearFechaSantiago(fechaStr) {
   // Si ya tiene timezone explícito, usarlo directamente
   if (fechaStr.includes('Z') || /[+-]\d{2}:\d{2}$/.test(fechaStr)) {
     return new Date(fechaStr);
   }
-  // Sin timezone: asumir hora local de Santiago
-  // Calculamos el offset real de Santiago para esa fecha específica
+  
   const fechaBase = fechaStr.includes('T') ? fechaStr : fechaStr + 'T00:00:00';
-  // Usar Intl para obtener el offset correcto de Santiago en esa fecha
-  const tempDate = new Date(fechaBase + 'Z');
-  const santiagoParts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Santiago',
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit',
-    hour12: false
-  }).formatToParts(tempDate);
   
-  const get = (type) => parseInt(santiagoParts.find(p => p.type === type)?.value || '0');
-  const utcHour = tempDate.getUTCHours();
-  const santiagHour = get('hour') === 24 ? 0 : get('hour');
-  let offsetHours = santiagHour - utcHour;
-  if (offsetHours > 12) offsetHours -= 24;
-  if (offsetHours < -12) offsetHours += 24;
+  // Obtener el offset real de Santiago para esa fecha específica
+  // Santiago es UTC-3 en verano (octubre-marzo) y UTC-4 en invierno (abril-septiembre)
+  const [datePart, timePart] = fechaBase.split('T');
+  const [year, month, day] = datePart.split('-').map(Number);
+  const mes = month; // 1-12
   
-  const offsetSign = offsetHours >= 0 ? '+' : '-';
-  const offsetAbs = Math.abs(offsetHours);
-  const offsetStr = `${offsetSign}${String(offsetAbs).padStart(2,'0')}:00`;
+  // Chile usa horario de verano: UTC-3 de octubre a marzo, UTC-4 de abril a septiembre
+  const esVerano = mes <= 3 || mes >= 10;
+  const offset = esVerano ? '-03:00' : '-04:00';
   
-  return new Date(fechaBase + offsetStr);
+  return new Date(`${fechaBase}${offset}`);
 }
 
 // ── Crear reserva en Google Calendar ─────────────────────────

@@ -48,7 +48,8 @@ function getSystemPrompt() {
   return `Eres el asistente virtual de Motel Apolo y Motel Le Chateau, dos moteles para adultos ubicados en Providencia, Santiago de Chile. Atiendes 24/7 por WhatsApp.
 
 FECHA Y HORA ACTUAL: ${ahoraStr}
-AÑO ACTUAL: ${anioActual} — usa siempre este año al interpretar fechas. Si el cliente dice "el sábado 14" busca el próximo sábado 14 en el calendario de ${anioActual}.
+AÑO ACTUAL: ${anioActual} — usa siempre este año al interpretar fechas.
+IMPORTANTE SOBRE FECHAS: Cuando el cliente diga una fecha como "el lunes 23 de marzo", verifica que el día de la semana sea correcto para ${anioActual}. El 23 de marzo de 2026 es LUNES. Usa siempre el año ${anioActual} para calcular los días correctamente. No asumas el día de la semana — calcúlalo.
 TARIFA VIGENTE HOY: ${tarifaHoy}
 SALUDO A USAR: "${saludo}, ¿en qué podemos ayudarte? 😊"
 
@@ -246,8 +247,8 @@ Luego incluye este bloque especial al final:
 2. Preguntar motel (Apolo o Le Chateau) si no lo menciona
 3. Preguntar tipo de habitación (Simple, VIP o Jacuzzi)
 4. Preguntar duración (momento/3h, 6h con promo, 12h/noche o 24h)
-5. Preguntar cuántas personas
-6. Preguntar fecha y hora de llegada
+5. Preguntar fecha y hora de llegada
+NOTA: NO preguntar cuántas personas. Asumir que son 2. Solo mencionar precio para 3 personas si el cliente lo pregunta explícitamente.
 7. Verificar disponibilidad
 8. Pedir nombre completo del cliente (nombre y apellido)
 9. Confirmar datos completos con precio correcto
@@ -371,7 +372,8 @@ async function procesarAccion(accion, datos, telefono) {
       const tipo = datos.tipo || 'simple_3h_semana';
       const duracionHoras = DURACIONES[tipo] || 3;
       let precio = PRECIOS[tipo] || 27000;
-      if (datos.personas === 3) precio = precio * 2;
+      const personas = datos.personas || 2;
+      if (personas === 3) precio = precio * 2;
       const disp = await consultarDisponibilidad(datos.fechaInicio, duracionHoras);
       if (!disp.hayDisponibilidad) {
         return 'RESULTADO_RESERVA: {"ok": false, "error": "Sin disponibilidad en ese horario"}';
