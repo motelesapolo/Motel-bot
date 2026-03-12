@@ -77,13 +77,16 @@ cliente.on('message', async (mensaje) => {
   if (mensaje.fromMe) return;
   if (mensaje.from === 'status@broadcast') return;
 
-  const telefono = mensaje.from.replace('@c.us', '');
+  const rawFrom = mensaje.from || '';
+  const telefono = rawFrom.replace('@c.us', '').replace('@lid', '');
   const texto = mensaje.body?.trim();
   if (!texto) return;
 
   console.log(`📩 [${new Date().toLocaleTimeString('es-CL')}] De ${telefono}: ${texto}`);
 
-  const ADMINS = [process.env.ADMIN_NUMERO, '56991655665'].filter(Boolean);
+  // Algunos números llegan con formato @lid - mapear al número real
+  const LID_ADMINS = ['202902928908358']; // @lid del +56991655665
+  const ADMINS = [process.env.ADMIN_NUMERO, '56991655665', ...LID_ADMINS].filter(Boolean);
 
   // ── Comandos Admin ────────────────────────────────────────
   if (ADMINS.includes(telefono)) {
