@@ -46,11 +46,11 @@ function parsearFechaSantiago(fechaStr) {
 }
 
 // ── Crear reserva en Google Calendar ─────────────────────────
-async function crearReserva({ nombre, telefono, tipo, fechaInicio, motel, precio, duracionHoras }) {
+async function crearReserva({ nombre, telefono, tipo, fechaInicio, motel, precio, duracionHoras, reservaIdFijo }) {
   const inicio = parsearFechaSantiago(fechaInicio);
   const horas = duracionHoras || 3;
   const fin = new Date(inicio.getTime() + horas * 60 * 60 * 1000);
-  const reservaId = generarIdReserva();
+  const reservaId = reservaIdFijo || generarIdReserva();
   const motelNombre = motel ? `Motel ${motel}` : (process.env.MOTEL_NOMBRE || 'Motel');
   const precioFinal = precio || 0;
 

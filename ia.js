@@ -256,10 +256,23 @@ MODIFICACIÓN DE RESERVAS: Si el cliente ya tiene una reserva activa y quiere ca
 3. Usar accion "crear_reserva" con el campo "esModificacion": true — esto cancela la reserva anterior automáticamente y crea una nueva
 4. Informar al cliente el nuevo número de reserva
 
-LLEGADA TARDE: Si un cliente dice que llegará más tarde de la hora reservada:
-1. Modificar la reserva con la nueva hora (usar esModificacion: true)
-2. Notificar automáticamente al hotel con la nueva hora de llegada
-3. Confirmar al cliente que se actualizó su reserva y el nuevo número
+LLEGADA TARDE / MODIFICACIÓN DE HORA: Si un cliente dice que llegará más tarde o quiere cambiar la hora:
+1. Preguntar la nueva hora SIEMPRE especificando AM o PM. Ejemplo: "¿A qué hora llegarás? Por favor indícame si es AM (madrugada/mañana) o PM (tarde/noche) para evitar confusiones 😊"
+2. Confirmar la hora con el cliente antes de modificar. Ejemplo: "Confirmo que llegarás a las 10:00 PM (22:00 hrs), ¿es correcto?"
+3. Usar la acción "modificar_reserva" — el N° de reserva se mantiene igual
+4. El hotel recibirá solo un aviso de modificación con la nueva hora
+5. Confirmar al cliente que su reserva fue actualizada con el MISMO número
+
+REGLAS ANTI-CONFUSIÓN DE HORAS:
+- SIEMPRE pedir AM/PM cuando el cliente dé una hora
+- SIEMPRE confirmar la hora en formato 24hrs antes de guardar. Ejemplo: "10 PM = 22:00 hrs"
+- Si el cliente dice "10" sin AM/PM, preguntar: "¿10 de la mañana (AM) o 10 de la noche (PM)?"
+- Recordar que el motel es 24/7, por lo que hay reservas a cualquier hora
+
+EJEMPLO de uso:
+[ACCION:modificar_reserva]
+{"nombre": "Juan Pérez", "tipo": "simple_3h_semana", "fechaInicio": "2026-03-14T22:00:00", "motel": "Apolo", "precio": 27000, "duracionHoras": 3, "reservaId": "384721"}
+[/ACCION]
 
 NÚMERO DE HABITACIÓN: No se asigna número de habitación al momento de la reserva. El número se asigna al llegar a recepción según disponibilidad. Si el cliente desea una habitación específica, debe llamar directamente al motel.
 
@@ -300,7 +313,8 @@ Luego incluye este bloque especial al final:
 2. Preguntar motel (Apolo o Le Chateau) si no lo menciona
 3. Preguntar tipo de habitación (Simple, VIP o Jacuzzi)
 4. Preguntar duración (momento/3h, 6h con promo, 12h/noche o 24h)
-5. Preguntar fecha y hora de llegada
+5. Preguntar fecha y hora de llegada — SIEMPRE pedir que especifiquen AM o PM. Ejemplo: "¿A qué hora llegarán? Indícame AM (madrugada/mañana) o PM (tarde/noche) 😊"
+6. Confirmar la hora en formato 24hrs antes de crear la reserva. Ejemplo: "Confirmo llegada a las 10:00 PM (22:00 hrs) del sábado 14 de marzo, ¿correcto?"
 NOTA: NO preguntar cuántas personas. Asumir que son 2. Solo mencionar precio para 3 personas si el cliente lo pregunta explícitamente.
 7. Verificar disponibilidad
 8. Pedir nombre completo del cliente (nombre y apellido)
@@ -414,6 +428,28 @@ async function notificarEmpresa(datos, result, tipo, precio, duracionHoras, tele
   }
 }
 
+// ── Notificar modificación de reserva al hotel ────────────────
+async function notificarModificacion(reservaId, datos, telefono) {
+  if (!clienteWhatsApp) return;
+  try {
+    const chatId = `56945676410@c.us`;
+    const opFecha = { timeZone: 'America/Santiago', weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', hour12: true };
+    const nuevaHora = new Date(datos.fechaInicio).toLocaleString('es-CL', opFecha);
+    const texto = [
+      `🔄 *MODIFICACIÓN DE RESERVA*`,
+      ``,
+      `🔖 N° Reserva: ${reservaId}`,
+      `👤 Cliente: ${datos.nombre}`,
+      `🕐 Nueva hora de llegada: ${nuevaHora}`,
+      `🏨 Motel: ${datos.motel || 'Apolo'}`,
+    ].join('\n');
+    await clienteWhatsApp.sendMessage(chatId, texto);
+    console.log(`📨 Notificación de modificación enviada al hotel`);
+  } catch (err) {
+    console.error('Error notificando modificación:', err.message);
+  }
+}
+
 // ── Procesar acciones ─────────────────────────────────────────
 async function procesarAccion(accion, datos, telefono) {
   switch (accion) {
@@ -448,6 +484,41 @@ async function procesarAccion(accion, datos, telefono) {
       }
       return `RESULTADO_RESERVA: ${JSON.stringify({ ...result, precio })}`;
     }
+    case 'modificar_reserva': {
+      // Guardar el ID anterior para mantenerlo
+      const idAnterior = reservasEnProgreso.get(telefono) || datos.reservaId;
+
+      // Cancelar reserva anterior en Google Calendar
+      if (idAnterior) {
+        await cancelarReserva(idAnterior);
+        reservasEnProgreso.delete(telefono);
+        console.log(`🔄 Reserva #${idAnterior} cancelada para modificación`);
+      }
+
+      // Crear nueva reserva con misma ID anterior
+      const tipo = datos.tipo || 'simple_3h_semana';
+      const duracionHoras = DURACIONES[tipo] || 3;
+      let precio = datos.precio || PRECIOS[tipo] || 27000;
+      const tipoLabel = tipo.replace(/_/g, ' ').replace('semana','(semana)').replace('finde','(fin de semana)');
+      const result = await crearReserva({
+        nombre: datos.nombre,
+        telefono: datos.telefono || telefono,
+        tipo: tipoLabel,
+        fechaInicio: datos.fechaInicio,
+        motel: datos.motel || 'Apolo',
+        precio,
+        duracionHoras,
+        reservaIdFijo: idAnterior, // mantener mismo ID
+      });
+
+      if (result.ok) {
+        reservasEnProgreso.set(telefono, idAnterior || result.id);
+        // Notificar al hotel solo el cambio de hora
+        await notificarModificacion(idAnterior, datos, telefono);
+      }
+      return `RESULTADO_MODIFICACION: ${JSON.stringify({ ...result, id: idAnterior || result.id, precio })}`;
+    }
+
     case 'cancelar_reserva': {
       const result = await cancelarReserva(datos.reservaId);
       return `RESULTADO_CANCELACION: ${JSON.stringify(result)}`;
