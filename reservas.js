@@ -60,12 +60,14 @@ async function crearReserva({ nombre, telefono, tipo, fechaInicio, motel, precio
   const finStr = fin.toLocaleString('es-CL', opcionesFecha);
 
   const evento = {
-    summary: `🏨 [${motelNombre}] ${tipo} - ${nombre} #${reservaId}`,
+    // Extraer solo el tipo de habitación (simple, vip o jacuzzi)
+    const tipoCorto = tipo.toLowerCase().includes('jacuzzi') ? 'Jacuzzi' :
+                      tipo.toLowerCase().includes('vip') ? 'VIP' : 'Simple';
+    summary: `${nombre} / ${tipoCorto} / $${precioFinal.toLocaleString('es-CL')}`,
     description: [
       `🔖 N° Reserva: ${reservaId}`,
       `🏨 Motel: ${motelNombre}`,
       `👤 Cliente: ${nombre}`,
-      `📱 Teléfono: ${telefono}`,
       `🛏️ Tipo: ${tipo}`,
       `⏱️ Duración: ${horas} horas`,
       `💰 Precio: $${precioFinal.toLocaleString('es-CL')} CLP`,
