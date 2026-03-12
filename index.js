@@ -83,10 +83,10 @@ cliente.on('message', async (mensaje) => {
 
   console.log(`📩 [${new Date().toLocaleTimeString('es-CL')}] De ${telefono}: ${texto}`);
 
-  const ADMIN_NUMERO = process.env.ADMIN_NUMERO || '';
+  const ADMINS = [process.env.ADMINS[0], '56991655665'].filter(Boolean);
 
   // ── Comandos Admin ────────────────────────────────────────
-  if (telefono === ADMIN_NUMERO) {
+  if (ADMINS.includes(telefono)) {
     if (texto === '/desactivar') {
       botPausado = true;
       await mensaje.reply('⏸️ *Bot pausado globalmente.* Responde tú manualmente.\nEscribe /activar para reactivar.');
