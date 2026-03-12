@@ -86,7 +86,7 @@ cliente.on('message', async (mensaje) => {
 
   // Algunos números llegan con formato @lid - mapear al número real
   const LID_ADMINS = ['202902928908358']; // @lid del +56991655665
-  const ADMINS = [process.env.ADMIN_NUMERO, '56991655665', ...LID_ADMINS].filter(Boolean);
+  const ADMINS = [process.env.ADMIN_NUMERO, '56991655665', '56999644093', ...LID_ADMINS].filter(Boolean);
 
   // ── Comandos Admin ────────────────────────────────────────
   if (ADMINS.includes(telefono)) {
