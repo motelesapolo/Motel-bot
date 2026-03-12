@@ -83,7 +83,7 @@ cliente.on('message', async (mensaje) => {
 
   console.log(`📩 [${new Date().toLocaleTimeString('es-CL')}] De ${telefono}: ${texto}`);
 
-  const ADMINS = [process.env.ADMINS[0], '56991655665'].filter(Boolean);
+  const ADMINS = [process.env.ADMIN_NUMERO, '56991655665'].filter(Boolean);
 
   // ── Comandos Admin ────────────────────────────────────────
   if (ADMINS.includes(telefono)) {
