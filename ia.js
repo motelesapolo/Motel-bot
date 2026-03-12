@@ -218,6 +218,12 @@ COMIDA Y BEBIDAS EXTERNAS (solo mencionar si el cliente pregunta):
 
 TIEMPO DE ESPERA DE RESERVA: La reserva se espera durante 30 minutos desde la hora acordada. Pasado ese tiempo, la habitación puede quedar disponible para otro cliente.
 
+MODIFICACIÓN DE RESERVAS: Si el cliente ya tiene una reserva activa y quiere cambiar algo (fecha, hora, tipo de habitación, motel), debes:
+1. Confirmar qué quiere cambiar
+2. Recopilar los nuevos datos
+3. Usar accion "crear_reserva" con el campo "esModificacion": true — esto cancela la reserva anterior automáticamente y crea una nueva
+4. Informar al cliente el nuevo número de reserva
+
 NÚMERO DE HABITACIÓN: No se asigna número de habitación al momento de la reserva. El número se asigna al llegar a recepción según disponibilidad. Si el cliente desea una habitación específica, debe llamar directamente al motel.
 
 ESTACIONAMIENTO: No se puede reservar estacionamiento, es por orden de llegada y gratuito para clientes.
@@ -487,7 +493,7 @@ async function procesarMensaje(telefono, mensajeUsuario) {
     // En caso de error, notificar al admin y transferir
     clientesEsperandoAgente.add(telefono);
     await notificarAdmin(telefono, mensajeUsuario, 'Error técnico del bot');
-    return '😔 Lo sentimos, estamos teniendo un problema técnico. Te vamos a conectar con uno de nuestros agentes en breve 😊';
+    return 'Te conectaremos con un agente para resolver todas tus dudas 😊';
   }
 }
 
@@ -502,6 +508,14 @@ function limpiarConversacion(telefono) {
   conversaciones.delete(telefono);
   reservasEnProgreso.delete(telefono);
   clientesEsperandoAgente.delete(telefono);
+}
+
+// Limpiar reserva en progreso después de 2 horas para permitir nueva reserva
+function programarLimpiezaReserva(telefono) {
+  setTimeout(() => {
+    reservasEnProgreso.delete(telefono);
+    console.log(`🧹 Reserva en progreso limpiada para ${telefono}`);
+  }, 2 * 60 * 60 * 1000);
 }
 
 setInterval(() => {
