@@ -13,6 +13,7 @@ const PORT = process.env.PORT || 3000;
 let qrActual = null;
 let botConectado = false;
 let botPausado = false;
+let numeroPrueba = null; // Cuando está activo, solo responde a este número
 
 app.get('/', (req, res) => {
   if (botConectado) {
@@ -96,8 +97,26 @@ cliente.on('message', async (mensaje) => {
       await mensaje.reply('▶️ *Bot reactivado.* Vuelve a responder automáticamente.');
       return;
     }
+    // Modo prueba - solo responde al número especificado
+    if (texto.startsWith('/prueba')) {
+      const num = texto.split(' ')[1];
+      if (num) {
+        numeroPrueba = num.replace('+', '').replace(/\s/g, '');
+        await mensaje.reply(`🧪 *Modo prueba activado*\nSolo responderé al número: +${numeroPrueba}\nPara desactivar escribe /prueba_off`);
+      } else {
+        await mensaje.reply('❌ Debes indicar el número. Ejemplo: /prueba +56912345678');
+      }
+      return;
+    }
+
+    if (texto === '/prueba_off') {
+      numeroPrueba = null;
+      await mensaje.reply('✅ *Modo prueba desactivado*\nEl bot responde a todos normalmente.');
+      return;
+    }
+
     if (texto === '/estado') {
-      await mensaje.reply(`${botPausado ? '⏸️ PAUSADO' : '✅ ACTIVO'}\n🏨 ${process.env.MOTEL_NOMBRE}\n⏰ ${new Date().toLocaleString('es-CL', { timeZone: 'America/Santiago' })}\n\nComandos disponibles:\n/desactivar - Pausar bot\n/activar - Reactivar bot\n/limpiar - Reiniciar tu conversación\n/activar_cliente NUMERO - Reactivar bot para un cliente`);
+      await mensaje.reply(`${botPausado ? '⏸️ PAUSADO' : '✅ ACTIVO'}${numeroPrueba ? `\n🧪 MODO PRUEBA: solo +${numeroPrueba}` : ''}\n🏨 ${process.env.MOTEL_NOMBRE}\n⏰ ${new Date().toLocaleString('es-CL', { timeZone: 'America/Santiago' })}\n\nComandos disponibles:\n/desactivar - Pausar bot\n/activar - Reactivar bot\n/limpiar - Reiniciar tu conversación\n/activar_cliente NUMERO - Reactivar bot para un cliente`);
       return;
     }
     if (texto === '/limpiar') {
