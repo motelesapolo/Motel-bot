@@ -13,9 +13,11 @@ require('dotenv').config();
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const conversaciones = new Map();
 const reservasEnProgreso = new Map();
-// Guarda { id, googleEventId } de la última reserva confirmada por teléfono
-const reservasConfirmadas = new Map();
-const clientesEsperandoAgente = new Set(); // clientes que pidieron agente humano
+const reservasConfirmadas = new Map();   // { id, googleEventId } por reservaId
+const clientesEsperandoAgente = new Set();
+const preferenciaCliente = new Map();    // último tipo hab reservado por teléfono
+const ultimoMensaje = new Map();         // último mensaje para detectar repetición
+const ultimaActividad = new Map();       // timestamp último mensaje para timeout
 
 let clienteWhatsApp = null;
 const ADMIN_NUMERO = process.env.ADMIN_NUMERO || '';
@@ -31,6 +33,27 @@ function getSaludo() {
   if (h >= 6 && h < 12) return 'Buenos días';
   if (h >= 12 && h < 20) return 'Buenas tardes';
   return 'Buenas noches';
+}
+
+function esMadrugada() {
+  const hora = new Date().toLocaleString('es-CL', { timeZone: 'America/Santiago', hour: 'numeric', hour12: false });
+  const h = parseInt(hora);
+  return h >= 2 && h < 6;
+}
+
+function esSinAgente() {
+  // Sin agente: lunes-jueves desde 22:00, viernes-sábado desde 23:30, hasta las 9:00
+  const ahora = new Date();
+  const ahoraStr = ahora.toLocaleString('en-US', { timeZone: 'America/Santiago' });
+  const local = new Date(ahoraStr);
+  const h = local.getHours();
+  const min = local.getMinutes();
+  const dia = local.getDay(); // 0=dom,1=lun,...,5=vie,6=sab
+  const minutos = h * 60 + min;
+  const esFinde = dia === 5 || dia === 6;
+  const inicioSinAgente = esFinde ? (23 * 60 + 30) : (22 * 60);
+  const finSinAgente = 9 * 60;
+  return minutos >= inicioSinAgente || minutos < finSinAgente;
 }
 
 // ── System Prompt completo ────────────────────────────────────
@@ -129,6 +152,16 @@ IMPORTANTE SOBRE FECHAS:
 - Cuando confirmes una fecha al cliente, di siempre el día y el número: "sábado 14 de marzo".
 TARIFA VIGENTE HOY: ${tarifaHoy}
 SALUDO A USAR: "${saludo}, ¿en qué podemos ayudarte? 😊"
+${esMadrugada() ? `MODO MADRUGADA ACTIVO: Es madrugada (2AM-6AM). Sé muy breve y directo. Al saludar presenta este menú rápido:
+
+"${saludo} 👋 ¿En qué te ayudamos?
+
+1️⃣ Reservar
+2️⃣ Ver precios
+3️⃣ Ubicación
+📞 Más info: +56 9 4567 6410"
+
+No des explicaciones largas, el cliente sabe lo que quiere. Concreta la reserva rápido.` : ''}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🤖 TU PERSONALIDAD
@@ -358,12 +391,11 @@ HORARIO: Abiertos 24/7, los 365 días del año, incluyendo todos los feriados, s
 🔧 TRANSFERENCIA A AGENTE HUMANO
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Si el cliente pide hablar con una persona, dice palabras como "agente", "persona", "recepción", "humano", o si no puedes responder su consulta con certeza, responde EXACTAMENTE así:
+Si el cliente pide hablar con una persona, dice palabras como "agente", "persona", "recepción", "humano", o si no puedes responder su consulta con certeza:
 
-"Entendido, te voy a conectar con uno de nuestros agentes para que te pueda ayudar mejor. Estamos recibiendo mensajes por orden de llegada y nos comunicaremos contigo lo más pronto posible 😊"
+- Si HAY agentes disponibles (lunes a jueves antes de las 22:00, viernes y sábado antes de las 23:30): responde "Entendido, te voy a conectar con uno de nuestros agentes para que te pueda ayudar mejor. Estamos recibiendo mensajes por orden de llegada y nos comunicaremos contigo lo más pronto posible 😊" y agrega [TRANSFERIR_AGENTE]
 
-Luego incluye este bloque especial al final:
-[TRANSFERIR_AGENTE]
+- Si NO hay agentes disponibles (lunes a jueves desde las 22:00, viernes y sábado desde las 23:30, hasta las 9:00): responde "En este momento no tenemos agentes disponibles (nuestro horario de atención es hasta las 22:00 en días de semana y 23:30 los fines de semana). Puedes llamarnos al +56 9 4567 6410 o escribirnos mañana desde las 9:00 😊" — NO uses [TRANSFERIR_AGENTE] para no pausar el bot
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📅 PROCESO DE RESERVA
@@ -414,7 +446,14 @@ REGLAS:
 - Viernes y sábado son SIEMPRE finde (aunque coincidan con feriado)
 - Feriado que cae lunes-jueves: tarifa normal, pero su víspera es finde
 - El calendario de arriba ya indica cada día si aplica finde o no, úsalo
-- Si no hay disponibilidad, ofrece el otro motel o un horario alternativo`;
+- Si no hay disponibilidad, ofrece el otro motel o un horario alternativo
+- Si el sistema responde HORA_EN_PASADO, dile al cliente amablemente que la hora indicada ya pasó y pregúntale a qué hora desea llegar
+- Si el sistema responde RESERVA_DUPLICADA, pregunta al cliente: "Ya tienes una reserva activa (N° [reservaExistente]). ¿Quieres modificarla o hacer una reserva adicional?"
+- Se pueden hacer reservas con muy poco tiempo de anticipación, incluso para 15 minutos más — no hay límite mínimo de anticipación
+
+LLEGADA SIN RESERVA (solo si el cliente pregunta explícitamente):
+- Sí se puede llegar sin reserva previa, sujeto a disponibilidad al momento de llegar
+- Recomendamos reservar con anticipación para garantizar disponibilidad, especialmente fines de semana`;
 }
 
 // ── Tabla de precios y duraciones ────────────────────────────
@@ -501,9 +540,18 @@ async function procesarAccion(accion, datos, telefono) {
       return `RESULTADO_DISPONIBILIDAD: ${JSON.stringify(result)}`;
     }
     case 'crear_reserva': {
+      // Validar que la hora de llegada no sea en el pasado
+      const ahoraChile = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Santiago' }));
+      const fechaLlegadaCheck = new Date(new Date(datos.fechaInicio).toLocaleString('en-US', { timeZone: 'America/Santiago' }));
+      if (fechaLlegadaCheck < ahoraChile) {
+        return 'RESULTADO_RESERVA: {"ok": false, "error": "HORA_EN_PASADO"}';
+      }
+
       // Corregir tipo automáticamente según fecha real de llegada
       let tipo = datos.tipo || 'simple_3h_semana';
-      const fechaLlegada = new Date(new Date(datos.fechaInicio).toLocaleString('en-US', { timeZone: 'America/Santiago' }));
+      // Fix zona horaria cruce medianoche: usar fecha real Santiago
+      const fechaLlegadaRaw = new Date(datos.fechaInicio);
+      const fechaLlegada = new Date(fechaLlegadaRaw.toLocaleString('en-US', { timeZone: 'America/Santiago' }));
       const deberiaSerFinde = esTarifaFinde(fechaLlegada);
       if (!tipo.endsWith('_24h')) {
         if (deberiaSerFinde) {
@@ -516,9 +564,19 @@ async function procesarAccion(accion, datos, telefono) {
       let precio = PRECIOS[tipo] || 27000;
       const personas = datos.personas || 2;
       if (personas === 3) precio = precio * 2;
+      // Verificar reserva duplicada (mismo cliente, misma fecha aprox)
+      if (!datos.esModificacion && reservasEnProgreso.has(telefono)) {
+        const idExistente = reservasEnProgreso.get(telefono);
+        return `RESULTADO_RESERVA: {"ok": false, "error": "RESERVA_DUPLICADA", "reservaExistente": "${idExistente}"}`;
+      }
+
       const disp = await consultarDisponibilidad(datos.fechaInicio, duracionHoras);
       if (!disp.hayDisponibilidad) {
         return 'RESULTADO_RESERVA: {"ok": false, "error": "Sin disponibilidad en ese horario"}';
+      }
+      // Notificar admin si el motel está lleno
+      if (disp.disponibles === 0) {
+        await notificarAdmin(telefono, datos.fechaInicio, `⚠️ MOTEL LLENO: No hay habitaciones ${datos.tipo || ''} disponibles en ${datos.motel || 'Apolo'} para este horario`);
       }
       const tipoLabel = tipo.replace(/_/g, ' ').replace('semana','(semana)').replace('finde','(fin de semana)');
       // Si es modificación, recuperar datos de la reserva anterior
@@ -546,9 +604,10 @@ async function procesarAccion(accion, datos, telefono) {
       });
       if (result.ok) {
         reservasEnProgreso.set(telefono, result.id);
-        // Guardar para futuras modificaciones
         reservasConfirmadas.set(result.id, { id: result.id, googleEventId: result.googleEventId });
-        // Notificar al celular de la empresa
+        // Guardar preferencia del cliente (tipo de hab sin sufijo semana/finde)
+        const tipoBase = tipo.replace(/_semana$|_finde$|_24h$/, '').replace(/_noche$/, '');
+        preferenciaCliente.set(telefono, tipoBase);
         await notificarEmpresa(datos, result, tipo, precio, duracionHoras, telefono);
       }
       return `RESULTADO_RESERVA: ${JSON.stringify({ ...result, precio })}`;
@@ -592,9 +651,31 @@ async function procesarMensaje(telefono, mensajeUsuario) {
     return null;
   }
 
+  // ── Timeout: limpiar conversación si pasaron 60 min sin actividad ──
+  const ahora = Date.now();
+  const ultimaAct = ultimaActividad.get(telefono);
+  if (ultimaAct && (ahora - ultimaAct) > 60 * 60 * 1000) {
+    conversaciones.delete(telefono);
+    reservasEnProgreso.delete(telefono);
+    console.log(`⏰ Conversación de ${telefono} limpiada por inactividad`);
+  }
+  ultimaActividad.set(telefono, ahora);
+
+  // ── Detectar mensaje repetido ──────────────────────────────
+  const msgNormalizado = mensajeUsuario.trim().toLowerCase();
+  const msgAnterior = ultimoMensaje.get(telefono);
+  const esRepetido = msgAnterior === msgNormalizado;
+  ultimoMensaje.set(telefono, msgNormalizado);
+
   if (!conversaciones.has(telefono)) conversaciones.set(telefono, []);
   const historial = conversaciones.get(telefono);
-  historial.push({ role: 'user', content: mensajeUsuario });
+
+  // ── Inyectar preferencia del cliente si existe ─────────────
+  const prefCliente = preferenciaCliente.get(telefono);
+  const notaPreferencia = prefCliente ? `\n[SISTEMA: Este cliente reservó anteriormente habitación tipo ${prefCliente}. Sugiérela primero si es relevante.]` : '';
+  const notaRepeticion = esRepetido ? '\n[SISTEMA: El cliente repitió exactamente la misma pregunta. Responde de forma más simple y directa.]' : '';
+
+  historial.push({ role: 'user', content: mensajeUsuario + notaPreferencia + notaRepeticion });
   const historialReciente = historial.slice(-20);
 
   try {
@@ -654,6 +735,8 @@ function limpiarConversacion(telefono) {
   conversaciones.delete(telefono);
   reservasEnProgreso.delete(telefono);
   clientesEsperandoAgente.delete(telefono);
+  ultimoMensaje.delete(telefono);
+  ultimaActividad.delete(telefono);
 }
 
 // Limpiar reserva en progreso después de 2 horas para permitir nueva reserva
