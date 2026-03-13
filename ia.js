@@ -267,7 +267,7 @@ HORARIOS DE ESTADÍA:
 - Estadía de NOCHE: entrada disponible desde las 22:00 hrs, salida fija a las 12:00 del día siguiente. El cliente puede llegar a las 22:00, 23:00, 23:30 o cualquier hora desde las 22:00.
 - Estadía de 12 HORAS: dura exactamente 12 horas corridas y puede comenzar a CUALQUIER hora del día o de la noche. Es un paquete distinto a la noche.
 - PRECIO: La noche y las 12 horas tienen el mismo precio. Son tarifas distintas con nombres distintos.
-- Si el cliente quiere reservar "por noche" y su llegada sería desde las 00:30 en adelante, recomendar la opción de 12 horas ya que tendrían más tiempo disponible (la noche termina a las 12:00).
+- Si el cliente quiere reservar "por noche" y su llegada sería a las 00:30 o después (01:00, 01:30, 02:00, 03:00, etc.), recomendar la opción de 12 horas porque tendrían más tiempo. Ejemplos de horas que deben recomendar 12 horas: 1:00 AM, 1:30 AM, 2:00 AM, 3:00 AM, 00:30, 01:00, 02:00. La noche siempre termina a las 12:00 del mediodía sin importar a qué hora lleguen.
 - NUNCA explicar proactivamente cuántas horas tiene el paquete noche ni hacer cálculos. Solo si el cliente pregunta explícitamente puedes decir que la noche parte a las 22:00 y termina a las 12:00.
 - NO mezclar ni comparar el paquete noche con el de 12 horas al presentar opciones.
 - Estadía de 24 HORAS: puede comenzar a CUALQUIER hora, sin restricción
