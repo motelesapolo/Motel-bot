@@ -32,6 +32,47 @@ function getSaludo() {
 }
 
 // ── System Prompt completo ────────────────────────────────────
+// ── Feriados Chile (fijos + movibles 2025-2030) ───────────────
+const FERIADOS_CHILE = new Set([
+  // 2025
+  '2025-01-01','2025-04-18','2025-04-19','2025-05-01','2025-05-21',
+  '2025-06-20','2025-06-29','2025-07-16','2025-08-15','2025-09-18',
+  '2025-09-19','2025-10-12','2025-10-31','2025-11-01','2025-11-16',
+  '2025-12-08','2025-12-25',
+  // 2026
+  '2026-01-01','2026-04-03','2026-04-04','2026-05-01','2026-05-21',
+  '2026-06-19','2026-06-29','2026-07-16','2026-08-15','2026-09-18',
+  '2026-09-19','2026-10-12','2026-10-31','2026-11-01','2026-11-15',
+  '2026-12-08','2026-12-25',
+  // 2027
+  '2027-01-01','2027-03-26','2027-03-27','2027-05-01','2027-05-21',
+  '2027-06-25','2027-06-29','2027-07-16','2027-08-15','2027-09-18',
+  '2027-09-19','2027-10-12','2027-10-31','2027-11-01','2027-11-21',
+  '2027-12-08','2027-12-25',
+]);
+
+// Retorna 'YYYY-MM-DD' en zona Santiago
+function toFechaStr(date) {
+  return date.toLocaleDateString('en-CA', { timeZone: 'America/Santiago' });
+}
+
+// Verifica si el día siguiente es feriado
+function esVisperaFeriado(date) {
+  const manana = new Date(date);
+  manana.setDate(manana.getDate() + 1);
+  return FERIADOS_CHILE.has(toFechaStr(manana));
+}
+
+// Viernes y sábado: SIEMPRE finde (aunque sean feriado)
+// Víspera de feriado (lunes-jueves): finde
+// Feriado que cae lunes-jueves: normal
+// Todo lo demás: normal
+function esTarifaFinde(date) {
+  const dia = new Date(date.toLocaleString('en-US', { timeZone: 'America/Santiago' })).getDay();
+  if (dia === 5 || dia === 6) return true;
+  return esVisperaFeriado(date);
+}
+
 function getSystemPrompt() {
   const ahora = new Date();
   // Obtener fecha actual correcta en Santiago
@@ -40,8 +81,7 @@ function getSystemPrompt() {
     weekday: 'long', year: 'numeric', month: 'long',
     day: 'numeric', hour: '2-digit', minute: '2-digit',
   });
-  const diaSemana = ahora.getDay();
-  const esFinde = diaSemana === 5 || diaSemana === 6;
+  const esFinde = esTarifaFinde(ahora);
   const tarifaHoy = esFinde ? 'FIN DE SEMANA / VÍSPERA DE FESTIVO' : 'SEMANA (domingo a jueves)';
   const anioActual = ahora.getFullYear();
   const saludo = getSaludo();
@@ -56,12 +96,19 @@ function getSystemPrompt() {
   for (let i = 0; i < 60; i++) {
     const d = new Date(fechaSantiago);
     d.setDate(fechaSantiago.getDate() + i);
-    const nombreDia = diasSemana[d.getDay()];
-    const dia = d.getDate();
-    const mes = meses[d.getMonth()];
-    const año = d.getFullYear();
-    const esFinde = d.getDay() === 5 || d.getDay() === 6;
-    calendarioPróximos += `- ${nombreDia} ${dia} de ${mes} de ${año}${esFinde ? ' [FIN DE SEMANA]' : ''}\n`;
+    const dDate = new Date(d.toLocaleString('en-US', {timeZone: 'America/Santiago'}));
+    const nombreDia = diasSemana[dDate.getDay()];
+    const dia = dDate.getDate();
+    const mes = meses[dDate.getMonth()];
+    const año = dDate.getFullYear();
+    const esDiaFinde = esTarifaFinde(dDate);
+    const esFeriado = FERIADOS_CHILE.has(toFechaStr(dDate));
+    let etiqueta = '';
+    if (esFeriado && (dDate.getDay() === 5 || dDate.getDay() === 6)) etiqueta = ' [FERIADO + FIN DE SEMANA]';
+    else if (esFeriado) etiqueta = ' [FERIADO - tarifa normal]';
+    else if (esVisperaFeriado(dDate)) etiqueta = ' [VÍSPERA FERIADO - tarifa finde]';
+    else if (esDiaFinde) etiqueta = ' [FIN DE SEMANA]';
+    calendarioPróximos += `- ${nombreDia} ${dia} de ${mes} de ${año}${etiqueta}\n`;
   }
 
   return `Eres el asistente virtual de Motel Apolo y Motel Le Chateau, dos moteles para adultos ubicados en Providencia, Santiago de Chile. Atiendes 24/7 por WhatsApp.
@@ -256,23 +303,10 @@ MODIFICACIÓN DE RESERVAS: Si el cliente ya tiene una reserva activa y quiere ca
 3. Usar accion "crear_reserva" con el campo "esModificacion": true — esto cancela la reserva anterior automáticamente y crea una nueva
 4. Informar al cliente el nuevo número de reserva
 
-LLEGADA TARDE / MODIFICACIÓN DE HORA: Si un cliente dice que llegará más tarde o quiere cambiar la hora:
-1. Preguntar la nueva hora SIEMPRE especificando AM o PM. Ejemplo: "¿A qué hora llegarás? Por favor indícame si es AM (madrugada/mañana) o PM (tarde/noche) para evitar confusiones 😊"
-2. Confirmar la hora con el cliente antes de modificar. Ejemplo: "Confirmo que llegarás a las 10:00 PM (22:00 hrs), ¿es correcto?"
-3. Usar la acción "modificar_reserva" — el N° de reserva se mantiene igual
-4. El hotel recibirá solo un aviso de modificación con la nueva hora
-5. Confirmar al cliente que su reserva fue actualizada con el MISMO número
-
-REGLAS ANTI-CONFUSIÓN DE HORAS:
-- SIEMPRE pedir AM/PM cuando el cliente dé una hora
-- SIEMPRE confirmar la hora en formato 24hrs antes de guardar. Ejemplo: "10 PM = 22:00 hrs"
-- Si el cliente dice "10" sin AM/PM, preguntar: "¿10 de la mañana (AM) o 10 de la noche (PM)?"
-- Recordar que el motel es 24/7, por lo que hay reservas a cualquier hora
-
-EJEMPLO de uso:
-[ACCION:modificar_reserva]
-{"nombre": "Juan Pérez", "tipo": "simple_3h_semana", "fechaInicio": "2026-03-14T22:00:00", "motel": "Apolo", "precio": 27000, "duracionHoras": 3, "reservaId": "384721"}
-[/ACCION]
+LLEGADA TARDE: Si un cliente dice que llegará más tarde de la hora reservada:
+1. Modificar la reserva con la nueva hora (usar esModificacion: true)
+2. Notificar automáticamente al hotel con la nueva hora de llegada
+3. Confirmar al cliente que se actualizó su reserva y el nuevo número
 
 NÚMERO DE HABITACIÓN: No se asigna número de habitación al momento de la reserva. El número se asigna al llegar a recepción según disponibilidad. Si el cliente desea una habitación específica, debe llamar directamente al motel.
 
@@ -287,6 +321,12 @@ CARTA DE PRECIOS:
   https://drive.google.com/file/d/1xSV-35fgK19uEE8GBuBOStWKQlsygMDd/view?usp=drivesdk
 - Puedes decirle algo como: "Aquí te dejo nuestra carta de precios 😊 [enlace]"
 - Solo enviar el enlace si el cliente lo pide explícitamente.
+- NUNCA envíes este enlace cuando el cliente pida fotos de habitaciones.
+
+FOTOS DE HABITACIONES:
+- Si el cliente pide fotos, imágenes o videos de las habitaciones, NO envíes ningún link.
+- Responde algo como: "¡Claro! Para mostrarte las fotos de nuestras habitaciones te voy a conectar con uno de nuestros agentes 😊 En breve te contactamos."
+- Luego usa la acción TRANSFERIR_AGENTE para notificar al admin con motivo "El cliente solicitó fotos de habitaciones".
 
 RECLAMOS: servicioalcliente@motelesapolo.cl (lunes a viernes 9:00 a 17:00 hrs)
 
@@ -313,8 +353,7 @@ Luego incluye este bloque especial al final:
 2. Preguntar motel (Apolo o Le Chateau) si no lo menciona
 3. Preguntar tipo de habitación (Simple, VIP o Jacuzzi)
 4. Preguntar duración (momento/3h, 6h con promo, 12h/noche o 24h)
-5. Preguntar fecha y hora de llegada — SIEMPRE pedir que especifiquen AM o PM. Ejemplo: "¿A qué hora llegarán? Indícame AM (madrugada/mañana) o PM (tarde/noche) 😊"
-6. Confirmar la hora en formato 24hrs antes de crear la reserva. Ejemplo: "Confirmo llegada a las 10:00 PM (22:00 hrs) del sábado 14 de marzo, ¿correcto?"
+5. Preguntar fecha y hora de llegada
 NOTA: NO preguntar cuántas personas. Asumir que son 2. Solo mencionar precio para 3 personas si el cliente lo pregunta explícitamente.
 7. Verificar disponibilidad
 8. Pedir nombre completo del cliente (nombre y apellido)
@@ -348,7 +387,10 @@ TIPOS VÁLIDOS:
 REGLAS:
 - Verifica disponibilidad ANTES de confirmar
 - Si son 3 personas, el precio es el doble (solo mencionarlo si el cliente pregunta por capacidad o precio para 3 personas)
-- Aplica tarifa finde si la llegada es viernes o sábado
+- Aplica tarifa finde si la llegada es: viernes, sábado, o víspera de feriado chileno
+- Viernes y sábado son SIEMPRE finde (aunque coincidan con feriado)
+- Feriado que cae lunes-jueves: tarifa normal, pero su víspera es finde
+- El calendario de arriba ya indica cada día si aplica finde o no, úsalo
 - Si no hay disponibilidad, ofrece el otro motel o un horario alternativo`;
 }
 
@@ -428,28 +470,6 @@ async function notificarEmpresa(datos, result, tipo, precio, duracionHoras, tele
   }
 }
 
-// ── Notificar modificación de reserva al hotel ────────────────
-async function notificarModificacion(reservaId, datos, telefono) {
-  if (!clienteWhatsApp) return;
-  try {
-    const chatId = `56945676410@c.us`;
-    const opFecha = { timeZone: 'America/Santiago', weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', hour12: true };
-    const nuevaHora = new Date(datos.fechaInicio).toLocaleString('es-CL', opFecha);
-    const texto = [
-      `🔄 *MODIFICACIÓN DE RESERVA*`,
-      ``,
-      `🔖 N° Reserva: ${reservaId}`,
-      `👤 Cliente: ${datos.nombre}`,
-      `🕐 Nueva hora de llegada: ${nuevaHora}`,
-      `🏨 Motel: ${datos.motel || 'Apolo'}`,
-    ].join('\n');
-    await clienteWhatsApp.sendMessage(chatId, texto);
-    console.log(`📨 Notificación de modificación enviada al hotel`);
-  } catch (err) {
-    console.error('Error notificando modificación:', err.message);
-  }
-}
-
 // ── Procesar acciones ─────────────────────────────────────────
 async function procesarAccion(accion, datos, telefono) {
   switch (accion) {
@@ -458,7 +478,17 @@ async function procesarAccion(accion, datos, telefono) {
       return `RESULTADO_DISPONIBILIDAD: ${JSON.stringify(result)}`;
     }
     case 'crear_reserva': {
-      const tipo = datos.tipo || 'simple_3h_semana';
+      // Corregir tipo automáticamente según fecha real de llegada
+      let tipo = datos.tipo || 'simple_3h_semana';
+      const fechaLlegada = new Date(new Date(datos.fechaInicio).toLocaleString('en-US', { timeZone: 'America/Santiago' }));
+      const deberiaSerFinde = esTarifaFinde(fechaLlegada);
+      if (!tipo.endsWith('_24h')) {
+        if (deberiaSerFinde) {
+          tipo = tipo.replace(/_semana$/, '_finde');
+        } else {
+          tipo = tipo.replace(/_finde$/, '_semana');
+        }
+      }
       const duracionHoras = DURACIONES[tipo] || 3;
       let precio = PRECIOS[tipo] || 27000;
       const personas = datos.personas || 2;
@@ -484,41 +514,6 @@ async function procesarAccion(accion, datos, telefono) {
       }
       return `RESULTADO_RESERVA: ${JSON.stringify({ ...result, precio })}`;
     }
-    case 'modificar_reserva': {
-      // Guardar el ID anterior para mantenerlo
-      const idAnterior = reservasEnProgreso.get(telefono) || datos.reservaId;
-
-      // Cancelar reserva anterior en Google Calendar
-      if (idAnterior) {
-        await cancelarReserva(idAnterior);
-        reservasEnProgreso.delete(telefono);
-        console.log(`🔄 Reserva #${idAnterior} cancelada para modificación`);
-      }
-
-      // Crear nueva reserva con misma ID anterior
-      const tipo = datos.tipo || 'simple_3h_semana';
-      const duracionHoras = DURACIONES[tipo] || 3;
-      let precio = datos.precio || PRECIOS[tipo] || 27000;
-      const tipoLabel = tipo.replace(/_/g, ' ').replace('semana','(semana)').replace('finde','(fin de semana)');
-      const result = await crearReserva({
-        nombre: datos.nombre,
-        telefono: datos.telefono || telefono,
-        tipo: tipoLabel,
-        fechaInicio: datos.fechaInicio,
-        motel: datos.motel || 'Apolo',
-        precio,
-        duracionHoras,
-        reservaIdFijo: idAnterior, // mantener mismo ID
-      });
-
-      if (result.ok) {
-        reservasEnProgreso.set(telefono, idAnterior || result.id);
-        // Notificar al hotel solo el cambio de hora
-        await notificarModificacion(idAnterior, datos, telefono);
-      }
-      return `RESULTADO_MODIFICACION: ${JSON.stringify({ ...result, id: idAnterior || result.id, precio })}`;
-    }
-
     case 'cancelar_reserva': {
       const result = await cancelarReserva(datos.reservaId);
       return `RESULTADO_CANCELACION: ${JSON.stringify(result)}`;
@@ -637,4 +632,4 @@ setInterval(() => {
   }
 }, 60 * 60 * 1000);
 
-module.exports = { procesarMensaje, limpiarConversacion, setClienteWhatsApp, reactivarCliente };
+module.exports = { procesarMensaje, limpiarConversacion, setClienteWhatsApp, reactivarCliente, esTarifaFinde };

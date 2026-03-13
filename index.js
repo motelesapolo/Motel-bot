@@ -79,6 +79,13 @@ cliente.on('message', async (mensaje) => {
 
   const rawFrom = mensaje.from || '';
   const telefono = rawFrom.replace('@c.us', '').replace('@lid', '');
+  // Detectar mensaje de voz (ptt = push-to-talk) o audio
+  if (mensaje.type === 'ptt' || mensaje.type === 'audio') {
+    console.log(`🎤 Mensaje de voz de ${telefono} - respondiendo automáticamente`);
+    await mensaje.reply('Hola 👋 Lo sentimos, no podemos atender mensajes de voz. Por favor escríbenos tu consulta y con gusto te ayudamos 😊');
+    return;
+  }
+
   const texto = mensaje.body?.trim();
   if (!texto) return;
 
