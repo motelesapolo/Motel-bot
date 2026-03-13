@@ -13,6 +13,8 @@ require('dotenv').config();
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const conversaciones = new Map();
 const reservasEnProgreso = new Map();
+// Guarda { id, googleEventId } de la última reserva confirmada por teléfono
+const reservasConfirmadas = new Map();
 const clientesEsperandoAgente = new Set(); // clientes que pidieron agente humano
 
 let clienteWhatsApp = null;
@@ -298,15 +300,18 @@ TIEMPO DE ESPERA DE RESERVA: La reserva se espera durante 30 minutos desde la ho
 PROPINA: Al confirmar una reserva, recordar al cliente que la propina es voluntaria. Ejemplo: "Recuerda que la propina para nuestro personal es completamente voluntaria 😊" Pasado ese tiempo, la habitación puede quedar disponible para otro cliente.
 
 MODIFICACIÓN DE RESERVAS: Si el cliente ya tiene una reserva activa y quiere cambiar algo (fecha, hora, tipo de habitación, motel), debes:
-1. Confirmar qué quiere cambiar
+1. Confirmar qué quiere cambiar y pedir el número de reserva si no lo tienes
 2. Recopilar los nuevos datos
-3. Usar accion "crear_reserva" con el campo "esModificacion": true — esto cancela la reserva anterior automáticamente y crea una nueva
-4. Informar al cliente el nuevo número de reserva
+3. Usar accion "crear_reserva" con los campos "esModificacion": true y "reservaIdAnterior": "NÚMERO_RESERVA_ANTERIOR"
+   Ejemplo: {"nombre": "Juan", "fechaInicio": "...", "tipo": "...", "motel": "...", "esModificacion": true, "reservaIdAnterior": "123456"}
+4. El sistema borrará automáticamente la reserva anterior de Google Calendar y mantendrá el MISMO número de reserva
+5. Informar al cliente que su reserva fue actualizada y que el número de reserva NO cambia
 
 LLEGADA TARDE: Si un cliente dice que llegará más tarde de la hora reservada:
-1. Modificar la reserva con la nueva hora (usar esModificacion: true)
-2. Notificar automáticamente al hotel con la nueva hora de llegada
-3. Confirmar al cliente que se actualizó su reserva y el nuevo número
+1. Pedir el número de reserva si no lo tienes
+2. Modificar la reserva con la nueva hora (usar esModificacion: true y reservaIdAnterior con el número de reserva)
+3. Notificar automáticamente al hotel con la nueva hora de llegada
+4. Confirmar al cliente que se actualizó su reserva y que el número de reserva se mantiene igual
 
 NÚMERO DE HABITACIÓN: No se asigna número de habitación al momento de la reserva. El número se asigna al llegar a recepción según disponibilidad. Si el cliente desea una habitación específica, debe llamar directamente al motel.
 
@@ -498,6 +503,18 @@ async function procesarAccion(accion, datos, telefono) {
         return 'RESULTADO_RESERVA: {"ok": false, "error": "Sin disponibilidad en ese horario"}';
       }
       const tipoLabel = tipo.replace(/_/g, ' ').replace('semana','(semana)').replace('finde','(fin de semana)');
+      // Si es modificación, recuperar datos de la reserva anterior
+      let reservaIdExistente = null;
+      let googleEventIdExistente = null;
+      if (datos.esModificacion && datos.reservaIdAnterior) {
+        const anterior = reservasConfirmadas.get(datos.reservaIdAnterior);
+        if (anterior) {
+          reservaIdExistente = anterior.id;
+          googleEventIdExistente = anterior.googleEventId;
+          console.log(`🔄 Modificando reserva ${reservaIdExistente} - borrando evento Calendar ${googleEventIdExistente}`);
+        }
+      }
+
       const result = await crearReserva({
         nombre: datos.nombre,
         telefono: datos.telefono || telefono,
@@ -506,9 +523,13 @@ async function procesarAccion(accion, datos, telefono) {
         motel: datos.motel || 'Apolo',
         precio,
         duracionHoras,
+        reservaIdExistente,
+        googleEventIdExistente,
       });
       if (result.ok) {
         reservasEnProgreso.set(telefono, result.id);
+        // Guardar para futuras modificaciones
+        reservasConfirmadas.set(result.id, { id: result.id, googleEventId: result.googleEventId });
         // Notificar al celular de la empresa
         await notificarEmpresa(datos, result, tipo, precio, duracionHoras, telefono);
       }

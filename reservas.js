@@ -46,11 +46,25 @@ function parsearFechaSantiago(fechaStr) {
 }
 
 // ── Crear reserva en Google Calendar ─────────────────────────
-async function crearReserva({ nombre, telefono, tipo, fechaInicio, motel, precio, duracionHoras, reservaIdFijo }) {
+async function crearReserva({ nombre, telefono, tipo, fechaInicio, motel, precio, duracionHoras, reservaIdExistente, googleEventIdExistente }) {
   const inicio = parsearFechaSantiago(fechaInicio);
   const horas = duracionHoras || 3;
   const fin = new Date(inicio.getTime() + horas * 60 * 60 * 1000);
-  const reservaId = reservaIdFijo || generarIdReserva();
+
+  // Si es una modificación, reutilizar el ID anterior y borrar el evento anterior de Calendar
+  const reservaId = reservaIdExistente || generarIdReserva();
+  if (googleEventIdExistente) {
+    try {
+      const calendarTemp = getCalendarClient();
+      await calendarTemp.events.delete({
+        calendarId: process.env.GOOGLE_CALENDAR_ID || 'primary',
+        eventId: googleEventIdExistente,
+      });
+      console.log(`🗑️ Evento anterior eliminado de Calendar: ${googleEventIdExistente}`);
+    } catch (err) {
+      console.error('Error eliminando evento anterior:', err.message);
+    }
+  }
   const motelNombre = motel ? `Motel ${motel}` : (process.env.MOTEL_NOMBRE || 'Motel');
   const precioFinal = precio || 0;
 
@@ -97,7 +111,7 @@ async function crearReserva({ nombre, telefono, tipo, fechaInicio, motel, precio
       estado: 'confirmada',
     });
 
-    return { ok: true, id: reservaId, precio: precioFinal, inicio, fin };
+    return { ok: true, id: reservaId, googleEventId: res.data.id, precio: precioFinal, inicio, fin };
   } catch (err) {
     console.error('Error creando reserva en Google Calendar:', err.message);
     reservasEnMemoria.set(reservaId, {
