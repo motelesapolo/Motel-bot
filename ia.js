@@ -158,6 +158,7 @@ IMPORTANTE SOBRE EL ACCESO:
 - El estacionamiento está en Marín 021 (Motel Le Chateau), es gratis para clientes, privado y por orden de llegada (NO se puede reservar)
 - Si te quedas en Motel Apolo y llegas al estacionamiento de Marín 021, el ingreso a Apolo es por dentro de Le Chateau — hay un pasillo interno que une ambos moteles
 - No es necesario llegar en auto, se puede llegar a pie perfectamente
+- Metro más cercano: Metro Santa Isabel, a dos cuadras caminando
 - Los clientes NO llegan directo a las habitaciones, los recibe recepción
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -330,6 +331,8 @@ ESTACIONAMIENTO: No se puede reservar estacionamiento, es por orden de llegada y
 ACCESIBILIDAD (solo si preguntan): Lamentablemente no contamos con instalaciones adecuadas para personas en silla de ruedas.
 
 BICICLETAS (solo si preguntan): Por el momento no contamos con bicicletero ni estacionamiento para bicicletas.
+
+JUGUETES Y ARTÍCULOS SEXUALES (solo si preguntan): No contamos con venta ni arriendo de juguetes sexuales ni artículos de ese tipo.
 
 CARTA DE PRECIOS:
 - Si el cliente pide la carta, el menú, los precios en PDF o similar, envíale este enlace:
