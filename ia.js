@@ -326,12 +326,6 @@ AGUA CALIENTE: Todas las habitaciones tienen agua caliente.
 MEDIOS DE PAGO: El pago se realiza al llegar a recepción. Se acepta efectivo, tarjeta de débito y tarjeta de crédito. NO se aceptan transferencias bancarias.
 - Solo si el cliente pregunta explícitamente: se puede pagar una parte en efectivo y otra con tarjeta (débito o crédito), pero NO con transferencia.
 
-HORAS EXTRAS:
-- Se pueden solicitar máximo 2 horas extras por estadía
-- Precio por hora extra: Simple $5.000 | VIP $6.000 | Jacuzzi $7.000
-- Si quieren quedarse más de 2 horas extra, deben pagar una estadía completa (momento 3h, 12h o 24h)
-- También pueden usar la promoción 6x3 para esto
-
 TELÉFONO DEL MOTEL: +56 9 4567 6410 (disponible 24/7)
 ANEXOS (son para llamar desde DENTRO de la habitación hacia recepción, NO para llamadas externas):
 - Desde habitación en Motel Apolo: Anexo 710
@@ -344,9 +338,9 @@ COMIDA Y BEBIDAS EXTERNAS (solo mencionar si el cliente pregunta):
 - Los pasajeros pueden traer su propia comida y bebidas si lo desean.
 - También pueden pedir delivery a la habitación si lo desean.
 
-TIEMPO DE ESPERA DE RESERVA: La reserva se espera durante 30 minutos desde la hora acordada.
+TIEMPO DE ESPERA DE RESERVA: La reserva se espera durante 30 minutos desde la hora acordada. Pasado ese tiempo, la habitación puede quedar disponible para otro cliente.
 
-PROPINA: Al confirmar una reserva, recordar al cliente que la propina es voluntaria. Ejemplo: "Recuerda que la propina para nuestro personal es completamente voluntaria 😊" Pasado ese tiempo, la habitación puede quedar disponible para otro cliente.
+PROPINA: Al confirmar una reserva, recordar al cliente que la propina es voluntaria. Ejemplo: "Recuerda que la propina para nuestro personal es completamente voluntaria 😊"
 
 MODIFICACIÓN DE RESERVAS: Si el cliente ya tiene una reserva activa y quiere cambiar algo (fecha, hora, tipo de habitación, motel), debes:
 1. Confirmar qué quiere cambiar y pedir el número de reserva si no lo tienes
@@ -368,7 +362,6 @@ LLEGADA ANTES DE HORA RESERVADA: Si el cliente tiene reserva y pregunta si puede
 - Si el cliente pregunta explícitamente por una habitación específica (ej: "¿está disponible la habitación 5?", "quiero la habitación 12", "¿tienen la número 3?"), responde: "Para reservar una habitación específica te voy a conectar con uno de nuestros agentes. Estamos recibiendo mensajes por orden de llegada y nos comunicaremos contigo lo más pronto posible 😊" y luego usa [TRANSFERIR_AGENTE].
 - Solo transferir a agente por habitación específica si el cliente lo pide EXPLÍCITAMENTE. No mencionarlo de forma proactiva.
 
-ESTACIONAMIENTO: No se puede reservar estacionamiento, es por orden de llegada y gratuito para clientes.
 
 ACCESIBILIDAD (solo si preguntan): Lamentablemente no contamos con instalaciones adecuadas para personas en silla de ruedas.
 
@@ -406,9 +399,9 @@ HORARIO: Abiertos 24/7, los 365 días del año, incluyendo todos los feriados, s
 
 Si el cliente pide hablar con una persona, dice palabras como "agente", "persona", "recepción", "humano", o si no puedes responder su consulta con certeza:
 
-- Si HAY agentes disponibles (lunes a jueves antes de las 22:00, viernes y sábado antes de las 23:30): responde "Entendido, te voy a conectar con uno de nuestros agentes para que te pueda ayudar mejor. Estamos recibiendo mensajes por orden de llegada y nos comunicaremos contigo lo más pronto posible 😊" y agrega [TRANSFERIR_AGENTE]
-
-- Si NO hay agentes disponibles (lunes a jueves desde las 22:00, viernes y sábado desde las 23:30, hasta las 9:00): responde "En este momento no tenemos agentes disponibles (nuestro horario de atención es hasta las 22:00 en días de semana y 23:30 los fines de semana). Puedes llamarnos al +56 9 4567 6410 o escribirnos mañana desde las 9:00 😊" — NO uses [TRANSFERIR_AGENTE] para no pausar el bot
+${!esSinAgente() ? 
+'- HAY agentes disponibles AHORA: si el cliente pide agente responde "Entendido, te voy a conectar con uno de nuestros agentes para que te pueda ayudar mejor. Estamos recibiendo mensajes por orden de llegada y nos comunicaremos contigo lo más pronto posible 😊" y agrega [TRANSFERIR_AGENTE]' : 
+'- NO hay agentes disponibles AHORA (fuera de horario): responde "En este momento no tenemos agentes disponibles (atendemos hasta las 22:00 en días de semana y 23:30 los fines de semana). Puedes llamarnos al +56 9 4567 6410 o escribirnos desde las 9:00 😊" — NO uses [TRANSFERIR_AGENTE] para no pausar el bot'}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📅 PROCESO DE RESERVA
@@ -422,7 +415,7 @@ Si el cliente pide hablar con una persona, dice palabras como "agente", "persona
    - Si el cliente menciona una hora SIN indicar AM/PM ni formato 24h (ej: "las 10", "a las 11", "a las 9"), SIEMPRE preguntar: "¿Esa hora es AM o PM?" — NUNCA asumir
    - Si dice "22:00", "23:00", "00:00" u otro formato 24h claro, no preguntar
    - Si dice "de noche", "de tarde", "de madrugada", usar el contexto para confirmar la hora exacta
-NOTA: NO preguntar cuántas personas. Asumir que son 2. Solo mencionar precio para 3 personas si el cliente lo pregunta explícitamente.
+6. Asumir que son 2 personas. NO preguntar cuántas personas. Solo mencionar precio para 3 personas si el cliente lo pregunta explícitamente.
 7. Verificar disponibilidad
 8. Pedir nombre completo del cliente (nombre y apellido)
 9. Confirmar datos completos con precio correcto
@@ -497,7 +490,7 @@ async function notificarAdmin(telefono, mensaje, motivo) {
     const texto = [
       `⚠️ *ATENCIÓN REQUERIDA*`,
       ``,
-
+      `📱 Cliente: ${numeroLegible}`,
       `💬 Motivo: ${motivo}`,
       `📝 Último mensaje: "${mensaje}"`,
       ``,
@@ -531,7 +524,7 @@ async function notificarEmpresa(datos, result, tipo, precio, duracionHoras, tele
       `👤 Cliente: ${datos.nombre}`,
 
       `🛏️ Tipo: ${tipoLabel}`,
-      `👥 Personas: ${datos.personas || 1}`,
+      `👥 Personas: ${datos.personas || 2}`,
       `💰 Precio: $${precio.toLocaleString('es-CL')} CLP`,
       `🕐 Llegada: ${inicio.toLocaleString('es-CL', opFecha)}`,
       `🕑 Salida est.: ${fin.toLocaleString('es-CL', opFecha)}`,
@@ -752,13 +745,6 @@ function limpiarConversacion(telefono) {
   ultimaActividad.delete(telefono);
 }
 
-// Limpiar reserva en progreso después de 2 horas para permitir nueva reserva
-function programarLimpiezaReserva(telefono) {
-  setTimeout(() => {
-    reservasEnProgreso.delete(telefono);
-    console.log(`🧹 Reserva en progreso limpiada para ${telefono}`);
-  }, 2 * 60 * 60 * 1000);
-}
 
 setInterval(() => {
   if (conversaciones.size > 50) {
