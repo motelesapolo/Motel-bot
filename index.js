@@ -186,7 +186,9 @@ cliente.on('message', async (mensaje) => {
       console.log(`📸 Intentando enviar ${cantidad} fotos: ${motel}_${tipo}`);
       console.log(`📁 Carpeta fotos: ${path.join(__dirname, 'fotos')}`);
       for (let i = 1; i <= cantidad; i++) {
-        const rutaFoto = path.join(__dirname, 'fotos', `${motel}_${tipo}_${i}.jpg`);
+        // todo minúscula, extensión .jpeg: apolo_simple_1.jpeg / chateau_vip_1.jpeg
+        const motelNombre = motel === 'lechateau' ? 'chateau' : motel;
+        const rutaFoto = path.join(__dirname, 'fotos', `${motelNombre}_${tipo}_${i}.jpeg`);
         console.log(`📷 Verificando: ${rutaFoto} — existe: ${fs.existsSync(rutaFoto)}`);
         if (fs.existsSync(rutaFoto)) {
           const media = MessageMedia.fromFilePath(rutaFoto);
