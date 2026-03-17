@@ -168,6 +168,8 @@ cliente.on('message', async (mensaje) => {
     const pausa = Math.floor(Math.random() * 1000) + 800;
     await new Promise(r => setTimeout(r, pausa));
 
+    const chatId = mensaje.from;
+
     // Si la respuesta incluye fotos, enviarlas
     if (respuesta && typeof respuesta === 'object' && respuesta.fotos) {
       const { texto: textoRespuesta, fotos } = respuesta;
@@ -175,33 +177,25 @@ cliente.on('message', async (mensaje) => {
       const path = require('path');
       const fs = require('fs');
 
-      // Enviar texto primero
-      if (textoRespuesta) await mensaje.reply(textoRespuesta);
+      // Enviar texto primero sin reply
+      if (textoRespuesta) await cliente.sendMessage(chatId, textoRespuesta);
 
-      // Enviar fotos una por una
-      const motel = fotos.motel;   // "apolo" o "lechateau"
-      const tipo = fotos.tipo;     // "simple", "vip", "jacuzzi"
-      const cantidad = fotos.cantidad;
-
-      console.log(`📸 Intentando enviar ${cantidad} fotos: ${motel}_${tipo}`);
-      console.log(`📁 Carpeta fotos: ${path.join(__dirname, 'fotos')}`);
-      for (let i = 1; i <= cantidad; i++) {
-        // todo minúscula, extensión .jpeg: apolo_simple_1.jpeg / chateau_vip_1.jpeg
-        const motelNombre = motel === 'lechateau' ? 'chateau' : motel;
-        const rutaFoto = path.join(__dirname, 'fotos', `${motelNombre}_${tipo}_${i}.jpeg`);
-        console.log(`📷 Verificando: ${rutaFoto} — existe: ${fs.existsSync(rutaFoto)}`);
+      // Preparar y enviar todas las fotos en paralelo
+      const motelNombre = fotos.motel === 'lechateau' ? 'chateau' : fotos.motel;
+      const promesas = [];
+      for (let i = 1; i <= fotos.cantidad; i++) {
+        const rutaFoto = path.join(__dirname, 'fotos', `${motelNombre}_${fotos.tipo}_${i}.jpeg`);
         if (fs.existsSync(rutaFoto)) {
           const media = MessageMedia.fromFilePath(rutaFoto);
-          await mensaje.reply(media);
-          console.log(`✅ Foto ${i} enviada`);
-          await new Promise(r => setTimeout(r, 1000));
+          promesas.push(cliente.sendMessage(chatId, media));
         } else {
           console.log(`❌ Foto no encontrada: ${rutaFoto}`);
         }
       }
-      console.log(`📸 Proceso fotos finalizado: ${motel} ${tipo}`);
+      await Promise.all(promesas);
+      console.log(`📸 ${promesas.length} fotos enviadas a ${telefono}: ${motelNombre} ${fotos.tipo}`);
     } else {
-      await mensaje.reply(respuesta);
+      await cliente.sendMessage(chatId, respuesta);
       console.log(`📤 Respuesta enviada a ${telefono}`);
     }
   } catch (error) {
