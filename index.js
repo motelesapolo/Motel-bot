@@ -183,16 +183,21 @@ cliente.on('message', async (mensaje) => {
       const tipo = fotos.tipo;     // "simple", "vip", "jacuzzi"
       const cantidad = fotos.cantidad;
 
+      console.log(`📸 Intentando enviar ${cantidad} fotos: ${motel}_${tipo}`);
+      console.log(`📁 Carpeta fotos: ${path.join(__dirname, 'fotos')}`);
       for (let i = 1; i <= cantidad; i++) {
         const rutaFoto = path.join(__dirname, 'fotos', `${motel}_${tipo}_${i}.jpg`);
+        console.log(`📷 Verificando: ${rutaFoto} — existe: ${fs.existsSync(rutaFoto)}`);
         if (fs.existsSync(rutaFoto)) {
           const media = MessageMedia.fromFilePath(rutaFoto);
           await mensaje.reply(media);
-          // Pequeña pausa entre fotos para no saturar
+          console.log(`✅ Foto ${i} enviada`);
           await new Promise(r => setTimeout(r, 1000));
+        } else {
+          console.log(`❌ Foto no encontrada: ${rutaFoto}`);
         }
       }
-      console.log(`📸 Fotos enviadas a ${telefono}: ${motel} ${tipo} (${cantidad} fotos)`);
+      console.log(`📸 Proceso fotos finalizado: ${motel} ${tipo}`);
     } else {
       await mensaje.reply(respuesta);
       console.log(`📤 Respuesta enviada a ${telefono}`);
