@@ -13,11 +13,7 @@ require('dotenv').config();
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const conversaciones = new Map();
 const reservasEnProgreso = new Map();
-const reservasConfirmadas = new Map();   // { id, googleEventId } por reservaId
-const clientesEsperandoAgente = new Set();
-const preferenciaCliente = new Map();    // último tipo hab reservado por teléfono
-const ultimoMensaje = new Map();         // último mensaje para detectar repetición
-const ultimaActividad = new Map();       // timestamp último mensaje para timeout
+const clientesEsperandoAgente = new Set(); // clientes que pidieron agente humano
 
 let clienteWhatsApp = null;
 const ADMIN_NUMERO = process.env.ADMIN_NUMERO || '';
@@ -33,27 +29,6 @@ function getSaludo() {
   if (h >= 6 && h < 12) return 'Buenos días';
   if (h >= 12 && h < 20) return 'Buenas tardes';
   return 'Buenas noches';
-}
-
-function esMadrugada() {
-  const hora = new Date().toLocaleString('es-CL', { timeZone: 'America/Santiago', hour: 'numeric', hour12: false });
-  const h = parseInt(hora);
-  return h >= 2 && h < 6;
-}
-
-function esSinAgente() {
-  // Sin agente: lunes-jueves desde 22:00, viernes-sábado desde 23:30, hasta las 9:00
-  const ahora = new Date();
-  const ahoraStr = ahora.toLocaleString('en-US', { timeZone: 'America/Santiago' });
-  const local = new Date(ahoraStr);
-  const h = local.getHours();
-  const min = local.getMinutes();
-  const dia = local.getDay(); // 0=dom,1=lun,...,5=vie,6=sab
-  const minutos = h * 60 + min;
-  const esFinde = dia === 5 || dia === 6;
-  const inicioSinAgente = esFinde ? (23 * 60 + 30) : (22 * 60);
-  const finSinAgente = 9 * 60;
-  return minutos >= inicioSinAgente || minutos < finSinAgente;
 }
 
 // ── System Prompt completo ────────────────────────────────────
@@ -145,20 +120,13 @@ ${calendarioPróximos}
 REGLA IMPORTANTE: Para cualquier fecha que mencione el cliente ("el sábado", "mañana", "el 15"), búscala EXACTAMENTE en el calendario de arriba. NUNCA calcules fechas por tu cuenta.
 IMPORTANTE SOBRE FECHAS:
 - Hoy es ${ahoraStr}
-- Cuando el cliente diga "el sábado" o "el próximo sábado", búscalo EXACTAMENTE en el calendario de arriba.
-- Cuando confirmes una fecha al cliente, di siempre el día y el número: "viernes 20 de marzo".
+- Cuando el cliente diga "el sábado" o "el próximo sábado", calcula la fecha basándote en HOY exactamente.
+- El próximo sábado desde hoy (${ahoraStr}) es el día correcto — NO agregues ni restes días extra.
+- Fechas de referencia para marzo 2026: sábado 14, domingo 15, lunes 16, martes 17, miércoles 18, jueves 19, viernes 20, sábado 21.
+- NUNCA uses el 15 de marzo como sábado — el sábado de marzo 2026 es el 14 y el 21.
+- Cuando confirmes una fecha al cliente, di siempre el día y el número: "sábado 14 de marzo".
 TARIFA VIGENTE HOY: ${tarifaHoy}
 SALUDO A USAR: "${saludo}, ¿en qué podemos ayudarte? 😊"
-${esMadrugada() ? `MODO MADRUGADA ACTIVO: Es madrugada (2AM-6AM). Sé muy breve y directo. Al saludar presenta este menú rápido:
-
-"${saludo} 👋 ¿En qué te ayudamos?
-
-1️⃣ Reservar
-2️⃣ Ver precios
-3️⃣ Ubicación
-📞 Más info: +56 9 4567 6410"
-
-No des explicaciones largas, el cliente sabe lo que quiere. Concreta la reserva rápido.` : ''}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🤖 TU PERSONALIDAD
@@ -171,8 +139,6 @@ No des explicaciones largas, el cliente sabe lo que quiere. Concreta la reserva 
 - Usas emojis con moderación
 - SIEMPRE saludas con "${saludo}, ¿en qué podemos ayudarte? 😊" al inicio de cada conversación nueva
 - Si no sabes algo, ofreces transferir con un agente
-- NUNCA inventes ni supongas información que no esté explícitamente en estas instrucciones. Si el cliente pregunta algo que no está aquí (pisos del motel, estaciones de metro, distancias, características específicas, etc.), responde: "No tengo esa información disponible, pero puedes consultarlo directamente al +56 9 4567 6410 😊" — es mejor admitir que no sabes que dar información incorrecta
-- NO uses tu conocimiento general para rellenar vacíos de información del motel. Solo responde con lo que está en estas instrucciones.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🏨 LOS MOTELES
@@ -186,16 +152,10 @@ Teléfono: +56 9 4567 6410 | Horario: 24/7 todos los días incluyendo feriados
 Dirección: Marín 021, Providencia, Santiago
 Teléfono: +56 9 4567 6410 | Horario: 24/7 todos los días incluyendo feriados
 
-DIFERENCIA ENTRE MOTELES (solo si preguntan):
-- Ambos son muy similares en calidad y tienen los mismos tipos de habitación (Simple, VIP, Jacuzzi) y precios
-- Las habitaciones no son todas iguales entre sí — cada una tiene su propia decoración y características
-- Si el cliente pregunta cuál elegir, puedes decirle que ambos son igual de buenos y que la diferencia está en las habitaciones individuales
-
 IMPORTANTE SOBRE EL ACCESO:
 - El estacionamiento está en Marín 021 (Motel Le Chateau), es gratis para clientes, privado y por orden de llegada (NO se puede reservar)
 - Si te quedas en Motel Apolo y llegas al estacionamiento de Marín 021, el ingreso a Apolo es por dentro de Le Chateau — hay un pasillo interno que une ambos moteles
 - No es necesario llegar en auto, se puede llegar a pie perfectamente
-- Metro más cercano: Metro Santa Isabel, a dos cuadras caminando
 - Los clientes NO llegan directo a las habitaciones, los recibe recepción
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -228,7 +188,6 @@ PROMOCIÓN $22.000 de MotelNow:
 
 HORAS EXTRAS:
 - Se pueden pedir máximo 2 horas extras por estadía
-- Precio por hora extra: Simple $5.000 | VIP $6.000 | Jacuzzi $7.000
 - Si quieren quedarse más, deben pagar una estadía completa (momento 3h, 12h o 24h)
 - También pueden usar la promoción 6x3 para las horas extras
 
@@ -302,16 +261,6 @@ CAPACIDAD DE HABITACIONES:
 - Si no hay disponibilidad para el tipo/motel solicitado, ofrecer el otro motel o un horario diferente
 - Si tampoco hay disponibilidad en el otro motel, decir: "Lo sentimos, no tenemos disponibilidad para ese horario. Te invitamos a llamarnos directamente al +56 9 4567 6410 (Apolo anexo 710 / Le Chateau anexo 210) para revisar opciones o hablar con un agente."
 
-HORARIOS DE ESTADÍA:
-- Estadía de NOCHE: entrada disponible desde las 22:00 hrs, salida fija a las 12:00 del día siguiente. El cliente puede llegar a las 22:00, 23:00, 23:30 o cualquier hora desde las 22:00.
-- Estadía de 12 HORAS: dura exactamente 12 horas corridas y puede comenzar a CUALQUIER hora del día o de la noche. Es un paquete distinto a la noche.
-- PRECIO: La noche y las 12 horas tienen el mismo precio. Son tarifas distintas con nombres distintos.
-- Si el cliente quiere reservar "por noche" y su llegada sería a las 00:30 o después (01:00, 01:30, 02:00, 03:00, etc.), recomendar la opción de 12 horas porque tendrían más tiempo. Ejemplos de horas que deben recomendar 12 horas: 1:00 AM, 1:30 AM, 2:00 AM, 3:00 AM, 00:30, 01:00, 02:00. La noche siempre termina a las 12:00 del mediodía sin importar a qué hora lleguen.
-- NUNCA explicar proactivamente cuántas horas tiene el paquete noche ni hacer cálculos. Solo si el cliente pregunta explícitamente puedes decir que la noche parte a las 22:00 y termina a las 12:00.
-- NO mezclar ni comparar el paquete noche con el de 12 horas al presentar opciones.
-- Estadía de 24 HORAS: puede comenzar a CUALQUIER hora, sin restricción
-- Estadía de 3 HORAS (momento): puede comenzar a CUALQUIER hora
-
 POLÍTICA DE SALIDAS:
 - Habitaciones por momento (3h), por noche y por 12 horas: NO se puede salir y volver a entrar. Una vez que se sale, se termina la estadía.
 - Habitaciones por 24 horas: SÍ se puede salir y volver a entrar durante el período contratado.
@@ -319,12 +268,18 @@ POLÍTICA DE SALIDAS:
 
 DECORACIONES: No contamos con decoraciones propias, pero si el cliente llama al motel puede coordinar para ir antes y hacer la decoración él mismo.
 
-ESTACIONAMIENTO: Gratuito para clientes, privado, en Marín 021. Por orden de llegada, no se reserva. El estacionamiento es para autos y también sirve perfectamente para motos.
+ESTACIONAMIENTO: Gratuito para clientes, privado, en Marín 021. Por orden de llegada, no se reserva.
 
 AGUA CALIENTE: Todas las habitaciones tienen agua caliente.
 
 MEDIOS DE PAGO: El pago se realiza al llegar a recepción. Se acepta efectivo, tarjeta de débito y tarjeta de crédito. NO se aceptan transferencias bancarias.
 - Solo si el cliente pregunta explícitamente: se puede pagar una parte en efectivo y otra con tarjeta (débito o crédito), pero NO con transferencia.
+
+HORAS EXTRAS:
+- Se pueden solicitar máximo 2 horas extras por estadía
+- Precio por hora extra: Simple $5.000 | VIP $6.000 | Jacuzzi $7.000
+- Si quieren quedarse más de 2 horas extra, deben pagar una estadía completa (momento 3h, 12h o 24h)
+- También pueden usar la promoción 6x3 para esto
 
 TELÉFONO DEL MOTEL: +56 9 4567 6410 (disponible 24/7)
 ANEXOS (son para llamar desde DENTRO de la habitación hacia recepción, NO para llamadas externas):
@@ -338,54 +293,46 @@ COMIDA Y BEBIDAS EXTERNAS (solo mencionar si el cliente pregunta):
 - Los pasajeros pueden traer su propia comida y bebidas si lo desean.
 - También pueden pedir delivery a la habitación si lo desean.
 
-TIEMPO DE ESPERA DE RESERVA: La reserva se espera durante 30 minutos desde la hora acordada. Pasado ese tiempo, la habitación puede quedar disponible para otro cliente.
+TIEMPO DE ESPERA DE RESERVA: La reserva se espera durante 30 minutos desde la hora acordada.
 
-PROPINA: Al confirmar una reserva, recordar al cliente que la propina es voluntaria. Ejemplo: "Recuerda que la propina para nuestro personal es completamente voluntaria 😊"
+PROPINA: Al confirmar una reserva, recordar al cliente que la propina es voluntaria. Ejemplo: "Recuerda que la propina para nuestro personal es completamente voluntaria 😊" Pasado ese tiempo, la habitación puede quedar disponible para otro cliente.
 
 MODIFICACIÓN DE RESERVAS: Si el cliente ya tiene una reserva activa y quiere cambiar algo (fecha, hora, tipo de habitación, motel), debes:
-1. Confirmar qué quiere cambiar y pedir el número de reserva si no lo tienes
+1. Confirmar qué quiere cambiar
 2. Recopilar los nuevos datos
-3. Usar accion "crear_reserva" con los campos "esModificacion": true y "reservaIdAnterior": "NÚMERO_RESERVA_ANTERIOR"
-   Ejemplo: {"nombre": "Juan", "fechaInicio": "...", "tipo": "...", "motel": "...", "esModificacion": true, "reservaIdAnterior": "123456"}
-4. El sistema borrará automáticamente la reserva anterior de Google Calendar y mantendrá el MISMO número de reserva
-5. Informar al cliente que su reserva fue actualizada y que el número de reserva NO cambia
+3. Usar accion "crear_reserva" con el campo "esModificacion": true — esto cancela la reserva anterior automáticamente y crea una nueva
+4. Informar al cliente el nuevo número de reserva
 
 LLEGADA TARDE: Si un cliente dice que llegará más tarde de la hora reservada:
-1. Pedir el número de reserva si no lo tienes
-2. Modificar la reserva con la nueva hora (usar esModificacion: true y reservaIdAnterior con el número de reserva)
-3. Notificar automáticamente al hotel con la nueva hora de llegada
-4. Confirmar al cliente que se actualizó su reserva y que el número de reserva se mantiene igual
+1. Modificar la reserva con la nueva hora (usar esModificacion: true)
+2. Notificar automáticamente al hotel con la nueva hora de llegada
+3. Confirmar al cliente que se actualizó su reserva y el nuevo número
 
-NÚMERO DE HABITACIÓN: No se asigna número de habitación al momento de la reserva. El número se asigna al llegar a recepción según disponibilidad.
+NÚMERO DE HABITACIÓN: No se asigna número de habitación al momento de la reserva. El número se asigna al llegar a recepción según disponibilidad. Si el cliente desea una habitación específica, debe llamar directamente al motel.
 
-LLEGADA ANTES DE HORA RESERVADA: Si el cliente tiene reserva y pregunta si puede llegar antes, responder que sí puede, ya que al tener reserva la habitación debería estar disponible. Responder cortésmente y solo si el cliente lo pregunta explícitamente.
-- Si el cliente pregunta explícitamente por una habitación específica (ej: "¿está disponible la habitación 5?", "quiero la habitación 12", "¿tienen la número 3?"), responde: "Para reservar una habitación específica te voy a conectar con uno de nuestros agentes. Estamos recibiendo mensajes por orden de llegada y nos comunicaremos contigo lo más pronto posible 😊" y luego usa [TRANSFERIR_AGENTE].
-- Solo transferir a agente por habitación específica si el cliente lo pide EXPLÍCITAMENTE. No mencionarlo de forma proactiva.
-
+ESTACIONAMIENTO: No se puede reservar estacionamiento, es por orden de llegada y gratuito para clientes.
 
 ACCESIBILIDAD (solo si preguntan): Lamentablemente no contamos con instalaciones adecuadas para personas en silla de ruedas.
 
 BICICLETAS (solo si preguntan): Por el momento no contamos con bicicletero ni estacionamiento para bicicletas.
 
-MASCOTAS (solo si preguntan): No se admiten mascotas.
-
-FUMADORES (solo si preguntan): Por ley está prohibido fumar en espacios cerrados. Si lo deseas, puedes pedirnos un cenicero a recepción 😊
-
-CHECK-IN / CHECK-OUT (solo si preguntan): No manejamos check-in ni check-out tradicional, salvo para el paquete noche que es de 22:00 a 12:00.
-
-JUGUETES Y ARTÍCULOS SEXUALES (solo si preguntan): No contamos con venta ni arriendo de juguetes sexuales ni artículos de ese tipo.
-
-MENÚ DE BAR Y COCINA:
-- Si el cliente pregunta por el menú de tragos, bebidas o comida, envíale este enlace:
+CARTA DE PRECIOS:
+- Si el cliente pide la carta, el menú, los precios en PDF o similar, envíale este enlace:
   https://drive.google.com/file/d/1xSV-35fgK19uEE8GBuBOStWKQlsygMDd/view?usp=drivesdk
-- Puedes decirle algo como: "Aquí te dejo nuestro menú 😊 [enlace]"
-- Solo enviar el enlace si el cliente pregunta explícitamente por el menú de tragos o comida.
-- NUNCA envíes este enlace cuando el cliente pida fotos de habitaciones, precios de habitaciones u otra cosa que no sea el menú de bar o cocina.
+- Puedes decirle algo como: "Aquí te dejo nuestra carta de precios 😊 [enlace]"
+- Solo enviar el enlace si el cliente lo pide explícitamente.
+- NUNCA envíes este enlace para fotos de habitaciones — para eso existe la acción enviar_fotos.
 
 FOTOS DE HABITACIONES:
-- Si el cliente pide fotos, imágenes o videos de las habitaciones, NO envíes ningún link.
-- Responde algo como: "¡Claro! Para mostrarte las fotos de nuestras habitaciones te voy a conectar con uno de nuestros agentes. Estamos recibiendo mensajes por orden de llegada y nos comunicaremos contigo lo más pronto posible 😊"
-- Luego usa la acción TRANSFERIR_AGENTE para notificar al admin con motivo "El cliente solicitó fotos de habitaciones".
+- Si el cliente pide fotos de habitaciones, usa la acción enviar_fotos indicando motel y tipo.
+- Si no especifica motel, pregunta primero: "¿Las fotos son de Motel Apolo o Le Chateau?"
+- Si no especifica tipo, pregunta: "¿Quieres ver fotos de habitación Simple, VIP o Jacuzzi?"
+- Una vez que tengas motel y tipo usa la acción. Valores válidos:
+  motel: "apolo" o "lechateau" | tipo: "simple", "vip" o "jacuzzi"
+[ACCION:enviar_fotos]
+{"motel": "apolo", "tipo": "simple"}
+[/ACCION]
+- Después de enviar las fotos di algo como: "¡Aquí van las fotos! 😊 ¿Te gustaría reservar?"
 
 RECLAMOS: servicioalcliente@motelesapolo.cl (lunes a viernes 9:00 a 17:00 hrs)
 
@@ -397,11 +344,12 @@ HORARIO: Abiertos 24/7, los 365 días del año, incluyendo todos los feriados, s
 🔧 TRANSFERENCIA A AGENTE HUMANO
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Si el cliente pide hablar con una persona, dice palabras como "agente", "persona", "recepción", "humano", o si no puedes responder su consulta con certeza:
+Si el cliente pide hablar con una persona, dice palabras como "agente", "persona", "recepción", "humano", o si no puedes responder su consulta con certeza, responde EXACTAMENTE así:
 
-${!esSinAgente() ? 
-'- HAY agentes disponibles AHORA: si el cliente pide agente responde "Entendido, te voy a conectar con uno de nuestros agentes para que te pueda ayudar mejor. Estamos recibiendo mensajes por orden de llegada y nos comunicaremos contigo lo más pronto posible 😊" y agrega [TRANSFERIR_AGENTE]' : 
-'- NO hay agentes disponibles AHORA (fuera de horario): responde "En este momento no tenemos agentes disponibles (atendemos hasta las 22:00 en días de semana y 23:30 los fines de semana). Puedes llamarnos al +56 9 4567 6410 o escribirnos desde las 9:00 😊" — NO uses [TRANSFERIR_AGENTE] para no pausar el bot'}
+"Entendido, te voy a conectar con uno de nuestros agentes para que te pueda ayudar mejor. En breve te contactamos 😊"
+
+Luego incluye este bloque especial al final:
+[TRANSFERIR_AGENTE]
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📅 PROCESO DE RESERVA
@@ -412,10 +360,7 @@ ${!esSinAgente() ?
 3. Preguntar tipo de habitación (Simple, VIP o Jacuzzi)
 4. Preguntar duración (momento/3h, 6h con promo, 12h/noche o 24h)
 5. Preguntar fecha y hora de llegada
-   - Si el cliente menciona una hora SIN indicar AM/PM ni formato 24h (ej: "las 10", "a las 11", "a las 9"), SIEMPRE preguntar: "¿Esa hora es AM o PM?" — NUNCA asumir
-   - Si dice "22:00", "23:00", "00:00" u otro formato 24h claro, no preguntar
-   - Si dice "de noche", "de tarde", "de madrugada", usar el contexto para confirmar la hora exacta
-6. Asumir que son 2 personas. NO preguntar cuántas personas. Solo mencionar precio para 3 personas si el cliente lo pregunta explícitamente.
+NOTA: NO preguntar cuántas personas. Asumir que son 2. Solo mencionar precio para 3 personas si el cliente lo pregunta explícitamente.
 7. Verificar disponibilidad
 8. Pedir nombre completo del cliente (nombre y apellido)
 9. Confirmar datos completos con precio correcto
@@ -452,14 +397,7 @@ REGLAS:
 - Viernes y sábado son SIEMPRE finde (aunque coincidan con feriado)
 - Feriado que cae lunes-jueves: tarifa normal, pero su víspera es finde
 - El calendario de arriba ya indica cada día si aplica finde o no, úsalo
-- Si no hay disponibilidad, ofrece el otro motel o un horario alternativo
-- Si el sistema responde HORA_EN_PASADO, dile al cliente amablemente que la hora indicada ya pasó y pregúntale a qué hora desea llegar
-- Si el sistema responde RESERVA_DUPLICADA, pregunta al cliente: "Ya tienes una reserva activa (N° [reservaExistente]). ¿Quieres modificarla o hacer una reserva adicional?"
-- Se pueden hacer reservas con muy poco tiempo de anticipación, incluso para 15 minutos más — no hay límite mínimo de anticipación
-
-LLEGADA SIN RESERVA (solo si el cliente pregunta explícitamente):
-- Sí se puede llegar sin reserva previa, sujeto a disponibilidad al momento de llegar
-- Recomendamos reservar con anticipación para garantizar disponibilidad, especialmente fines de semana`;
+- Si no hay disponibilidad, ofrece el otro motel o un horario alternativo`;
 }
 
 // ── Tabla de precios y duraciones ────────────────────────────
@@ -490,7 +428,7 @@ async function notificarAdmin(telefono, mensaje, motivo) {
     const texto = [
       `⚠️ *ATENCIÓN REQUERIDA*`,
       ``,
-      `📱 Cliente: ${numeroLegible}`,
+
       `💬 Motivo: ${motivo}`,
       `📝 Último mensaje: "${mensaje}"`,
       ``,
@@ -524,7 +462,7 @@ async function notificarEmpresa(datos, result, tipo, precio, duracionHoras, tele
       `👤 Cliente: ${datos.nombre}`,
 
       `🛏️ Tipo: ${tipoLabel}`,
-      `👥 Personas: ${datos.personas || 2}`,
+      `👥 Personas: ${datos.personas || 1}`,
       `💰 Precio: $${precio.toLocaleString('es-CL')} CLP`,
       `🕐 Llegada: ${inicio.toLocaleString('es-CL', opFecha)}`,
       `🕑 Salida est.: ${fin.toLocaleString('es-CL', opFecha)}`,
@@ -546,18 +484,9 @@ async function procesarAccion(accion, datos, telefono) {
       return `RESULTADO_DISPONIBILIDAD: ${JSON.stringify(result)}`;
     }
     case 'crear_reserva': {
-      // Validar que la hora de llegada no sea en el pasado
-      const ahoraChile = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Santiago' }));
-      const fechaLlegadaCheck = new Date(new Date(datos.fechaInicio).toLocaleString('en-US', { timeZone: 'America/Santiago' }));
-      if (fechaLlegadaCheck < ahoraChile) {
-        return 'RESULTADO_RESERVA: {"ok": false, "error": "HORA_EN_PASADO"}';
-      }
-
       // Corregir tipo automáticamente según fecha real de llegada
       let tipo = datos.tipo || 'simple_3h_semana';
-      // Fix zona horaria cruce medianoche: usar fecha real Santiago
-      const fechaLlegadaRaw = new Date(datos.fechaInicio);
-      const fechaLlegada = new Date(fechaLlegadaRaw.toLocaleString('en-US', { timeZone: 'America/Santiago' }));
+      const fechaLlegada = new Date(new Date(datos.fechaInicio).toLocaleString('en-US', { timeZone: 'America/Santiago' }));
       const deberiaSerFinde = esTarifaFinde(fechaLlegada);
       if (!tipo.endsWith('_24h')) {
         if (deberiaSerFinde) {
@@ -570,33 +499,11 @@ async function procesarAccion(accion, datos, telefono) {
       let precio = PRECIOS[tipo] || 27000;
       const personas = datos.personas || 2;
       if (personas === 3) precio = precio * 2;
-      // Verificar reserva duplicada (mismo cliente, misma fecha aprox)
-      if (!datos.esModificacion && reservasEnProgreso.has(telefono)) {
-        const idExistente = reservasEnProgreso.get(telefono);
-        return `RESULTADO_RESERVA: {"ok": false, "error": "RESERVA_DUPLICADA", "reservaExistente": "${idExistente}"}`;
-      }
-
       const disp = await consultarDisponibilidad(datos.fechaInicio, duracionHoras);
       if (!disp.hayDisponibilidad) {
         return 'RESULTADO_RESERVA: {"ok": false, "error": "Sin disponibilidad en ese horario"}';
       }
-      // Notificar admin si el motel está lleno
-      if (disp.disponibles === 0) {
-        await notificarAdmin(telefono, datos.fechaInicio, `⚠️ MOTEL LLENO: No hay habitaciones ${datos.tipo || ''} disponibles en ${datos.motel || 'Apolo'} para este horario`);
-      }
       const tipoLabel = tipo.replace(/_/g, ' ').replace('semana','(semana)').replace('finde','(fin de semana)');
-      // Si es modificación, recuperar datos de la reserva anterior
-      let reservaIdExistente = null;
-      let googleEventIdExistente = null;
-      if (datos.esModificacion && datos.reservaIdAnterior) {
-        const anterior = reservasConfirmadas.get(datos.reservaIdAnterior);
-        if (anterior) {
-          reservaIdExistente = anterior.id;
-          googleEventIdExistente = anterior.googleEventId;
-          console.log(`🔄 Modificando reserva ${reservaIdExistente} - borrando evento Calendar ${googleEventIdExistente}`);
-        }
-      }
-
       const result = await crearReserva({
         nombre: datos.nombre,
         telefono: datos.telefono || telefono,
@@ -605,15 +512,10 @@ async function procesarAccion(accion, datos, telefono) {
         motel: datos.motel || 'Apolo',
         precio,
         duracionHoras,
-        reservaIdExistente,
-        googleEventIdExistente,
       });
       if (result.ok) {
         reservasEnProgreso.set(telefono, result.id);
-        reservasConfirmadas.set(result.id, { id: result.id, googleEventId: result.googleEventId });
-        // Guardar preferencia del cliente (tipo de hab sin sufijo semana/finde)
-        const tipoBase = tipo.replace(/_semana$|_finde$|_24h$/, '').replace(/_noche$/, '');
-        preferenciaCliente.set(telefono, tipoBase);
+        // Notificar al celular de la empresa
         await notificarEmpresa(datos, result, tipo, precio, duracionHoras, telefono);
       }
       return `RESULTADO_RESERVA: ${JSON.stringify({ ...result, precio })}`;
@@ -621,6 +523,17 @@ async function procesarAccion(accion, datos, telefono) {
     case 'cancelar_reserva': {
       const result = await cancelarReserva(datos.reservaId);
       return `RESULTADO_CANCELACION: ${JSON.stringify(result)}`;
+    }
+    case 'enviar_fotos': {
+      const motel = (datos.motel || '').toLowerCase().includes('chateau') ? 'lechateau' : 'apolo';
+      const tipo = (datos.tipo || '').toLowerCase();
+      const cantidades = {
+        apolo:     { simple: 10, vip: 9, jacuzzi: 7 },
+        lechateau: { simple: 5,  vip: 6, jacuzzi: 4 },
+      };
+      const cantidad = cantidades[motel]?.[tipo] || 0;
+      if (cantidad === 0) return 'RESULTADO_FOTOS: {"ok": false, "error": "Tipo o motel inválido"}';
+      return `RESULTADO_FOTOS: {"ok": true, "motel": "${motel}", "tipo": "${tipo}", "cantidad": ${cantidad}}`;
     }
     default:
       return 'ACCION_DESCONOCIDA';
@@ -649,6 +562,16 @@ function limpiarRespuesta(texto) {
     .trim();
 }
 
+function extraerFotos(resultados) {
+  // Extrae info de fotos del resultado de acciones si existe
+  const match = resultados.match(/RESULTADO_FOTOS: (\{.*?\})/);
+  if (!match) return null;
+  try {
+    const data = JSON.parse(match[1]);
+    return data.ok ? data : null;
+  } catch { return null; }
+}
+
 // ── Función principal ─────────────────────────────────────────
 async function procesarMensaje(telefono, mensajeUsuario) {
   // Si el cliente está esperando agente, no responder
@@ -657,31 +580,9 @@ async function procesarMensaje(telefono, mensajeUsuario) {
     return null;
   }
 
-  // ── Timeout: limpiar conversación si pasaron 60 min sin actividad ──
-  const ahora = Date.now();
-  const ultimaAct = ultimaActividad.get(telefono);
-  if (ultimaAct && (ahora - ultimaAct) > 60 * 60 * 1000) {
-    conversaciones.delete(telefono);
-    reservasEnProgreso.delete(telefono);
-    console.log(`⏰ Conversación de ${telefono} limpiada por inactividad`);
-  }
-  ultimaActividad.set(telefono, ahora);
-
-  // ── Detectar mensaje repetido ──────────────────────────────
-  const msgNormalizado = mensajeUsuario.trim().toLowerCase();
-  const msgAnterior = ultimoMensaje.get(telefono);
-  const esRepetido = msgAnterior === msgNormalizado;
-  ultimoMensaje.set(telefono, msgNormalizado);
-
   if (!conversaciones.has(telefono)) conversaciones.set(telefono, []);
   const historial = conversaciones.get(telefono);
-
-  // ── Inyectar preferencia del cliente si existe ─────────────
-  const prefCliente = preferenciaCliente.get(telefono);
-  const notaPreferencia = prefCliente ? `\n[SISTEMA: Este cliente reservó anteriormente habitación tipo ${prefCliente}. Sugiérela primero si es relevante.]` : '';
-  const notaRepeticion = esRepetido ? '\n[SISTEMA: El cliente repitió exactamente la misma pregunta. Responde de forma más simple y directa.]' : '';
-
-  historial.push({ role: 'user', content: mensajeUsuario + notaPreferencia + notaRepeticion });
+  historial.push({ role: 'user', content: mensajeUsuario });
   const historialReciente = historial.slice(-20);
 
   try {
@@ -695,8 +596,11 @@ async function procesarMensaje(telefono, mensajeUsuario) {
     let textoRespuesta = respuesta.content[0].text;
 
     // Verificar si hay acciones
+    let fotosParaEnviar = null;
     if (textoRespuesta.includes('[ACCION:')) {
       const resultados = await ejecutarAccionesIA(textoRespuesta, telefono);
+      // Capturar fotos si hay
+      fotosParaEnviar = extraerFotos(resultados);
       const respuestaFinal = await anthropic.messages.create({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 1000,
@@ -719,6 +623,9 @@ async function procesarMensaje(telefono, mensajeUsuario) {
     const respuestaLimpia = limpiarRespuesta(textoRespuesta);
     historial.push({ role: 'assistant', content: respuestaLimpia });
     conversaciones.set(telefono, historial.slice(-40));
+
+    // Si hay fotos, retornar objeto con texto + info de fotos
+    if (fotosParaEnviar) return { texto: respuestaLimpia, fotos: fotosParaEnviar };
     return respuestaLimpia;
 
   } catch (error) {
@@ -741,10 +648,15 @@ function limpiarConversacion(telefono) {
   conversaciones.delete(telefono);
   reservasEnProgreso.delete(telefono);
   clientesEsperandoAgente.delete(telefono);
-  ultimoMensaje.delete(telefono);
-  ultimaActividad.delete(telefono);
 }
 
+// Limpiar reserva en progreso después de 2 horas para permitir nueva reserva
+function programarLimpiezaReserva(telefono) {
+  setTimeout(() => {
+    reservasEnProgreso.delete(telefono);
+    console.log(`🧹 Reserva en progreso limpiada para ${telefono}`);
+  }, 2 * 60 * 60 * 1000);
+}
 
 setInterval(() => {
   if (conversaciones.size > 50) {

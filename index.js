@@ -167,8 +167,36 @@ cliente.on('message', async (mensaje) => {
 
     const pausa = Math.floor(Math.random() * 1000) + 800;
     await new Promise(r => setTimeout(r, pausa));
-    await mensaje.reply(respuesta);
-    console.log(`📤 Respuesta enviada a ${telefono}`);
+
+    // Si la respuesta incluye fotos, enviarlas
+    if (respuesta && typeof respuesta === 'object' && respuesta.fotos) {
+      const { texto: textoRespuesta, fotos } = respuesta;
+      const { MessageMedia } = require('whatsapp-web.js');
+      const path = require('path');
+      const fs = require('fs');
+
+      // Enviar texto primero
+      if (textoRespuesta) await mensaje.reply(textoRespuesta);
+
+      // Enviar fotos una por una
+      const motel = fotos.motel;   // "apolo" o "lechateau"
+      const tipo = fotos.tipo;     // "simple", "vip", "jacuzzi"
+      const cantidad = fotos.cantidad;
+
+      for (let i = 1; i <= cantidad; i++) {
+        const rutaFoto = path.join(__dirname, 'fotos', `${motel}_${tipo}_${i}.jpg`);
+        if (fs.existsSync(rutaFoto)) {
+          const media = MessageMedia.fromFilePath(rutaFoto);
+          await mensaje.reply(media);
+          // Pequeña pausa entre fotos para no saturar
+          await new Promise(r => setTimeout(r, 1000));
+        }
+      }
+      console.log(`📸 Fotos enviadas a ${telefono}: ${motel} ${tipo} (${cantidad} fotos)`);
+    } else {
+      await mensaje.reply(respuesta);
+      console.log(`📤 Respuesta enviada a ${telefono}`);
+    }
   } catch (error) {
     console.error('Error:', error);
     await mensaje.reply('😔 Estamos teniendo un problema técnico. Te conectamos con un agente en breve 😊');
