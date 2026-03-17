@@ -13,7 +13,11 @@ require('dotenv').config();
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const conversaciones = new Map();
 const reservasEnProgreso = new Map();
-const clientesEsperandoAgente = new Set(); // clientes que pidieron agente humano
+const reservasConfirmadas = new Map();   // { id, googleEventId } por reservaId
+const clientesEsperandoAgente = new Set();
+const preferenciaCliente = new Map();    // último tipo hab reservado por teléfono
+const ultimoMensaje = new Map();         // último mensaje para detectar repetición
+const ultimaActividad = new Map();       // timestamp último mensaje para timeout
 
 let clienteWhatsApp = null;
 const ADMIN_NUMERO = process.env.ADMIN_NUMERO || '';
@@ -300,7 +304,9 @@ PROPINA: Al confirmar una reserva, recordar al cliente que la propina es volunta
 MODIFICACIÓN DE RESERVAS: Si el cliente ya tiene una reserva activa y quiere cambiar algo (fecha, hora, tipo de habitación, motel), debes:
 1. Confirmar qué quiere cambiar
 2. Recopilar los nuevos datos
-3. Usar accion "crear_reserva" con el campo "esModificacion": true — esto cancela la reserva anterior automáticamente y crea una nueva
+3. Usar accion "crear_reserva" con los campos "esModificacion": true y "reservaIdAnterior": "NÚMERO_RESERVA"
+   Ejemplo: {"nombre": "Juan", "fechaInicio": "...", "tipo": "...", "motel": "...", "esModificacion": true, "reservaIdAnterior": "123456"}
+4. El sistema borrará la reserva anterior de Google Calendar y mantendrá el MISMO número de reserva
 4. Informar al cliente el nuevo número de reserva
 
 LLEGADA TARDE: Si un cliente dice que llegará más tarde de la hora reservada:
@@ -451,9 +457,13 @@ async function notificarEmpresa(datos, result, tipo, precio, duracionHoras, tele
   try {
     const chatId = `${EMPRESA_NUMERO}@c.us`;
     const tipoLabel = tipo.replace(/_/g, ' ').replace('semana','(semana)').replace('finde','(fin de semana)');
+    // Parsear fechas correctamente en zona Santiago para evitar desfase de día
+    const opFecha = { timeZone: 'America/Santiago', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' };
     const inicio = new Date(result.inicio);
     const fin = new Date(result.fin);
-    const opFecha = { timeZone: 'America/Santiago', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+    // Verificar que el día de semana sea correcto en Santiago
+    const inicioSantiago = inicio.toLocaleString('es-CL', opFecha);
+    const finSantiago = fin.toLocaleString('es-CL', opFecha);
     
     const texto = [
       `📋 *NUEVA RESERVA #${result.id}*`,
@@ -464,8 +474,8 @@ async function notificarEmpresa(datos, result, tipo, precio, duracionHoras, tele
       `🛏️ Tipo: ${tipoLabel}`,
       `👥 Personas: ${datos.personas || 1}`,
       `💰 Precio: $${precio.toLocaleString('es-CL')} CLP`,
-      `🕐 Llegada: ${inicio.toLocaleString('es-CL', opFecha)}`,
-      `🕑 Salida est.: ${fin.toLocaleString('es-CL', opFecha)}`,
+      `🕐 Llegada: ${inicioSantiago}`,
+      `🕑 Salida est.: ${finSantiago}`,
       `⏳ Esperar hasta: 30 min después de la llegada`,
     ].join('\n');
     
@@ -484,25 +494,51 @@ async function procesarAccion(accion, datos, telefono) {
       return `RESULTADO_DISPONIBILIDAD: ${JSON.stringify(result)}`;
     }
     case 'crear_reserva': {
-      // Corregir tipo automáticamente según fecha real de llegada
+      // Validar que la hora no sea en el pasado
+      const ahoraChile = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Santiago' }));
+      const fechaLlegadaCheck = new Date(new Date(datos.fechaInicio).toLocaleString('en-US', { timeZone: 'America/Santiago' }));
+      if (fechaLlegadaCheck < ahoraChile) {
+        return 'RESULTADO_RESERVA: {"ok": false, "error": "HORA_EN_PASADO"}';
+      }
+
+      // Corregir tipo automáticamente según fecha real Santiago
       let tipo = datos.tipo || 'simple_3h_semana';
       const fechaLlegada = new Date(new Date(datos.fechaInicio).toLocaleString('en-US', { timeZone: 'America/Santiago' }));
       const deberiaSerFinde = esTarifaFinde(fechaLlegada);
       if (!tipo.endsWith('_24h')) {
-        if (deberiaSerFinde) {
-          tipo = tipo.replace(/_semana$/, '_finde');
-        } else {
-          tipo = tipo.replace(/_finde$/, '_semana');
-        }
+        tipo = deberiaSerFinde ? tipo.replace(/_semana$/, '_finde') : tipo.replace(/_finde$/, '_semana');
       }
       const duracionHoras = DURACIONES[tipo] || 3;
       let precio = PRECIOS[tipo] || 27000;
       const personas = datos.personas || 2;
       if (personas === 3) precio = precio * 2;
+
+      // Verificar reserva duplicada
+      if (!datos.esModificacion && reservasEnProgreso.has(telefono)) {
+        const idExistente = reservasEnProgreso.get(telefono);
+        return `RESULTADO_RESERVA: {"ok": false, "error": "RESERVA_DUPLICADA", "reservaExistente": "${idExistente}"}`;
+      }
+
       const disp = await consultarDisponibilidad(datos.fechaInicio, duracionHoras);
       if (!disp.hayDisponibilidad) {
         return 'RESULTADO_RESERVA: {"ok": false, "error": "Sin disponibilidad en ese horario"}';
       }
+      if (disp.disponibles === 0) {
+        await notificarAdmin(telefono, datos.fechaInicio, `⚠️ MOTEL LLENO: No hay habitaciones ${datos.tipo || ''} en ${datos.motel || 'Apolo'}`);
+      }
+
+      // Si es modificación, recuperar y borrar reserva anterior
+      let reservaIdExistente = null;
+      let googleEventIdExistente = null;
+      if (datos.esModificacion && datos.reservaIdAnterior) {
+        const anterior = reservasConfirmadas.get(datos.reservaIdAnterior);
+        if (anterior) {
+          reservaIdExistente = anterior.id;
+          googleEventIdExistente = anterior.googleEventId;
+          console.log(`🔄 Modificando reserva ${reservaIdExistente}`);
+        }
+      }
+
       const tipoLabel = tipo.replace(/_/g, ' ').replace('semana','(semana)').replace('finde','(fin de semana)');
       const result = await crearReserva({
         nombre: datos.nombre,
@@ -512,10 +548,14 @@ async function procesarAccion(accion, datos, telefono) {
         motel: datos.motel || 'Apolo',
         precio,
         duracionHoras,
+        reservaIdExistente,
+        googleEventIdExistente,
       });
       if (result.ok) {
         reservasEnProgreso.set(telefono, result.id);
-        // Notificar al celular de la empresa
+        reservasConfirmadas.set(result.id, { id: result.id, googleEventId: result.googleEventId });
+        const tipoBase = tipo.replace(/_semana$|_finde$|_24h$/, '').replace(/_noche$/, '');
+        preferenciaCliente.set(telefono, tipoBase);
         await notificarEmpresa(datos, result, tipo, precio, duracionHoras, telefono);
       }
       return `RESULTADO_RESERVA: ${JSON.stringify({ ...result, precio })}`;
@@ -580,9 +620,30 @@ async function procesarMensaje(telefono, mensajeUsuario) {
     return null;
   }
 
+  // Timeout: limpiar si pasaron 60 min sin actividad
+  const ahoraTs = Date.now();
+  const ultimaAct = ultimaActividad.get(telefono);
+  if (ultimaAct && (ahoraTs - ultimaAct) > 60 * 60 * 1000) {
+    conversaciones.delete(telefono);
+    reservasEnProgreso.delete(telefono);
+    console.log(`⏰ Conversación de ${telefono} limpiada por inactividad`);
+  }
+  ultimaActividad.set(telefono, ahoraTs);
+
+  // Detectar mensaje repetido
+  const msgNormalizado = mensajeUsuario.trim().toLowerCase();
+  const esRepetido = ultimoMensaje.get(telefono) === msgNormalizado;
+  ultimoMensaje.set(telefono, msgNormalizado);
+
   if (!conversaciones.has(telefono)) conversaciones.set(telefono, []);
   const historial = conversaciones.get(telefono);
-  historial.push({ role: 'user', content: mensajeUsuario });
+
+  // Inyectar notas de sistema si aplica
+  const prefCliente = preferenciaCliente.get(telefono);
+  const notaPreferencia = prefCliente ? `\n[SISTEMA: Este cliente reservó anteriormente habitación tipo ${prefCliente}. Sugiérela primero si es relevante.]` : '';
+  const notaRepeticion = esRepetido ? '\n[SISTEMA: El cliente repitió la misma pregunta. Responde más simple y directo.]' : '';
+
+  historial.push({ role: 'user', content: mensajeUsuario + notaPreferencia + notaRepeticion });
   const historialReciente = historial.slice(-20);
 
   try {
@@ -648,6 +709,8 @@ function limpiarConversacion(telefono) {
   conversaciones.delete(telefono);
   reservasEnProgreso.delete(telefono);
   clientesEsperandoAgente.delete(telefono);
+  ultimoMensaje.delete(telefono);
+  ultimaActividad.delete(telefono);
 }
 
 // Limpiar reserva en progreso después de 2 horas para permitir nueva reserva
