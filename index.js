@@ -157,7 +157,7 @@ cliente.on('message', async (mensaje) => {
   await chat.sendStateTyping();
 
   try {
-    const respuesta = await procesarMensaje(telefono, texto);
+    const respuesta = await procesarMensaje(telefono, texto, numeroPrueba);
     
     // Si es null, el cliente está esperando agente - no responder
     if (respuesta === null) {

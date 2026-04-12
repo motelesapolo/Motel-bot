@@ -35,6 +35,21 @@ function getSaludo() {
   return 'Buenas noches';
 }
 
+function esMadrugada() {
+  const hora = new Date().toLocaleString('es-CL', { timeZone: 'America/Santiago', hour: 'numeric', hour12: false });
+  return parseInt(hora) >= 2 && parseInt(hora) < 6;
+}
+
+function esSinAgente() {
+  const ahora = new Date();
+  const local = new Date(ahora.toLocaleString('en-US', { timeZone: 'America/Santiago' }));
+  const minutos = local.getHours() * 60 + local.getMinutes();
+  const dia = local.getDay();
+  const esFinde = dia === 5 || dia === 6;
+  const inicioSinAgente = esFinde ? (23 * 60 + 30) : (22 * 60);
+  return minutos >= inicioSinAgente || minutos < (9 * 60);
+}
+
 // ── System Prompt completo ────────────────────────────────────
 // ── Feriados Chile (fijos + movibles 2025-2030) ───────────────
 const FERIADOS_CHILE = new Set([
@@ -128,6 +143,10 @@ REGLA CRÍTICA DE FECHAS: El calendario de arriba es la ÚNICA fuente de verdad 
 - Hoy es ${ahoraStr}
 TARIFA VIGENTE HOY: ${tarifaHoy}
 SALUDO A USAR: "${saludo}, ¿en qué podemos ayudarte? 😊"
+${esMadrugada() ? `MODO MADRUGADA (2AM-6AM): Sé muy breve y directo. Al saludar presenta este menú:
+"${saludo} 👋 ¿En qué te ayudamos?
+1️⃣ Reservar  2️⃣ Ver precios  3️⃣ Ubicación  📞 +56 9 4567 6410"
+No des explicaciones largas. Concreta rápido.` : ''}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🤖 TU PERSONALIDAD
@@ -140,6 +159,8 @@ SALUDO A USAR: "${saludo}, ¿en qué podemos ayudarte? 😊"
 - Usas emojis con moderación
 - SIEMPRE saludas con "${saludo}, ¿en qué podemos ayudarte? 😊" al inicio de cada conversación nueva
 - Si no sabes algo, ofreces transferir con un agente
+- NUNCA inventes ni supongas información que no esté en estas instrucciones. Si no sabes algo responde: "No tengo esa información, pero puedes consultarlo al +56 9 4567 6410 😊"
+- NO uses tu conocimiento general para rellenar vacíos. Solo lo que está aquí.
 - ESTILO DE RESPUESTA: Breve, preciso y empático. Sin párrafos largos ni explicaciones innecesarias. Ve directo al punto. Si puede decirse en una línea, en una línea. Nunca des más información de la que te piden.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -159,6 +180,7 @@ IMPORTANTE SOBRE EL ACCESO:
 - Si te quedas en Motel Apolo y llegas al estacionamiento de Marín 021, el ingreso a Apolo es por dentro de Le Chateau — hay un pasillo interno que une ambos moteles
 - No es necesario llegar en auto, se puede llegar a pie perfectamente
 - Los clientes NO llegan directo a las habitaciones, los recibe recepción
+- Metro más cercano: Metro Santa Isabel, a dos cuadras caminando
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🛏️ HABITACIONES Y PRECIOS
@@ -274,6 +296,8 @@ ESTACIONAMIENTO: Gratuito para clientes, privado, en Marín 021. Por orden de ll
 
 AGUA CALIENTE: Todas las habitaciones tienen agua caliente.
 
+WIFI (solo si preguntan): Para consultar sobre WiFi comunícate directamente con el motel al +56 9 4567 6410.
+
 MEDIOS DE PAGO: El pago se realiza al llegar a recepción. Se acepta efectivo, tarjeta de débito y tarjeta de crédito. NO se aceptan transferencias bancarias.
 - Solo si el cliente pregunta explícitamente: se puede pagar una parte en efectivo y otra con tarjeta (débito o crédito), pero NO con transferencia.
 
@@ -322,6 +346,18 @@ ESTACIONAMIENTO: No se puede reservar estacionamiento, es por orden de llegada y
 
 ACCESIBILIDAD (solo si preguntan): Lamentablemente no contamos con instalaciones adecuadas para personas en silla de ruedas.
 
+LLEGADA SIN RESERVA (solo si preguntan): Sí se puede llegar sin reserva, sujeto a disponibilidad al momento de llegar. Se recomienda reservar con anticipación, especialmente fines de semana.
+
+LLEGADA ANTES DE HORA RESERVADA (solo si preguntan): Sí puede llegar antes, al tener reserva la habitación debería estar disponible.
+
+FUMADORES (solo si preguntan): Según la ley no se debe fumar en las habitaciones, pero si deseas hacerlo tenemos ceniceros a tu disposición 😊
+
+MASCOTAS (solo si preguntan): No se admiten mascotas bajo ninguna circunstancia.
+
+CAMBIO DE ACOMPAÑANTE (solo si preguntan): Si un pasajero entra con una pareja, esta se va y entra otra persona, debe pagar el valor de la habitación nuevamente. Se considera como 3 personas y el valor es el doble.
+
+MÁXIMO DE PERSONAS (solo si preguntan): Máximo 3 personas. No se permiten 4 o más. El valor para 3 personas es el doble del precio normal.
+
 BICICLETAS (solo si preguntan): Por el momento no contamos con bicicletero ni estacionamiento para bicicletas.
 
 CARTA DE PRECIOS:
@@ -352,12 +388,11 @@ HORARIO: Abiertos 24/7, los 365 días del año, incluyendo todos los feriados, s
 🔧 TRANSFERENCIA A AGENTE HUMANO
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Si el cliente pide hablar con una persona, dice palabras como "agente", "persona", "recepción", "humano", o si no puedes responder su consulta con certeza, responde EXACTAMENTE así:
+Si el cliente pide hablar con una persona, dice palabras como "agente", "persona", "recepción", "humano", o si no puedes responder su consulta con certeza:
 
-"Entendido, te voy a conectar con uno de nuestros agentes para que te pueda ayudar mejor. En breve te contactamos 😊"
-
-Luego incluye este bloque especial al final:
-[TRANSFERIR_AGENTE]
+${!esSinAgente() ? 
+'HAY agentes disponibles: responde "Entendido, te voy a conectar con uno de nuestros agentes para que te pueda ayudar mejor. Estamos recibiendo mensajes por orden de llegada y nos comunicaremos contigo lo más pronto posible 😊" y agrega [TRANSFERIR_AGENTE]' : 
+'NO hay agentes disponibles (lunes-jueves desde 22:00, viernes-sábado desde 23:30, hasta las 9:00): responde "En este momento no tenemos agentes disponibles. Puedes llamarnos al +56 9 4567 6410 o escribirnos desde las 9:00 😊" — NO uses [TRANSFERIR_AGENTE] para no pausar el bot'}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📅 PROCESO DE RESERVA
@@ -368,7 +403,9 @@ Luego incluye este bloque especial al final:
 3. Preguntar tipo de habitación (Simple, VIP o Jacuzzi)
 4. Preguntar duración (momento/3h, 6h con promo, 12h/noche o 24h)
 5. Preguntar fecha y hora de llegada
-NOTA: NO preguntar cuántas personas. Asumir que son 2. Solo mencionar precio para 3 personas si el cliente lo pregunta explícitamente.
+   - Si el cliente menciona una hora SIN AM/PM ni formato 24h (ej: "las 10", "las 11"), SIEMPRE preguntar: "¿Esa hora es AM o PM?" — NUNCA asumir
+   - Si dice "22:00", "23:00" u otro formato 24h claro, no preguntar
+6. Asumir que son 2 personas. NO preguntar cuántas personas. Solo mencionar precio para 3 si preguntan explícitamente.
 7. Verificar disponibilidad
 8. Pedir nombre completo del cliente (nombre y apellido)
 9. Confirmar datos completos con precio correcto
@@ -504,6 +541,7 @@ async function procesarAccion(accion, datos, telefono) {
       }
 
       // Corregir tipo automáticamente según fecha real Santiago
+      // Fix zona horaria cruce medianoche: convertir siempre a hora local Santiago
       let tipo = datos.tipo || 'simple_3h_semana';
       const fechaLlegada = new Date(new Date(datos.fechaInicio).toLocaleString('en-US', { timeZone: 'America/Santiago' }));
       const deberiaSerFinde = esTarifaFinde(fechaLlegada);
@@ -559,6 +597,13 @@ async function procesarAccion(accion, datos, telefono) {
         const tipoBase = tipo.replace(/_semana$|_finde$|_24h$/, '').replace(/_noche$/, '');
         preferenciaCliente.set(telefono, tipoBase);
         await notificarEmpresa(datos, result, tipo, precio, duracionHoras, telefono);
+        // Opción D: notificar admin si Calendar falló
+        if (result.fallback) {
+          await notificarAdmin(telefono, datos.nombre,
+            `⚠️ ALERTA: Reserva #${result.id} de ${datos.nombre} NO se guardó en Google Calendar por error técnico. Fue guardada en Google Sheets. Verifica manualmente.
+Datos: ${datos.motel} | ${tipoLabel} | ${datos.fechaInicio} | $${precio.toLocaleString('es-CL')}`
+          );
+        }
       }
       return `RESULTADO_RESERVA: ${JSON.stringify({ ...result, precio })}`;
     }
@@ -615,7 +660,10 @@ function extraerFotos(resultados) {
 }
 
 // ── Función principal ─────────────────────────────────────────
-async function procesarMensaje(telefono, mensajeUsuario) {
+async function procesarMensaje(telefono, mensajeUsuario, numeroPrueba = null) {
+  // Si modo prueba activo, ignorar todos excepto el número de prueba
+  if (numeroPrueba && telefono !== numeroPrueba) return null;
+
   // Si el cliente está esperando agente, no responder
   if (clientesEsperandoAgente.has(telefono)) {
     console.log(`👤 Cliente ${telefono} esperando agente humano - ignorando`);
@@ -625,7 +673,7 @@ async function procesarMensaje(telefono, mensajeUsuario) {
   // Timeout: limpiar si pasaron 60 min sin actividad
   const ahoraTs = Date.now();
   const ultimaAct = ultimaActividad.get(telefono);
-  if (ultimaAct && (ahoraTs - ultimaAct) > 60 * 60 * 1000) {
+  if (ultimaAct && (ahoraTs - ultimaAct) > 120 * 60 * 1000) {
     conversaciones.delete(telefono);
     reservasEnProgreso.delete(telefono);
     console.log(`⏰ Conversación de ${telefono} limpiada por inactividad`);
@@ -715,13 +763,6 @@ function limpiarConversacion(telefono) {
   ultimaActividad.delete(telefono);
 }
 
-// Limpiar reserva en progreso después de 2 horas para permitir nueva reserva
-function programarLimpiezaReserva(telefono) {
-  setTimeout(() => {
-    reservasEnProgreso.delete(telefono);
-    console.log(`🧹 Reserva en progreso limpiada para ${telefono}`);
-  }, 2 * 60 * 60 * 1000);
-}
 
 setInterval(() => {
   if (conversaciones.size > 50) {

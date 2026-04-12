@@ -6,6 +6,48 @@ require('dotenv').config();
 
 const reservasEnMemoria = new Map();
 
+// ── Google Sheets Auth ────────────────────────────────────────
+function getSheetsClient() {
+  const oAuth2Client = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    process.env.GOOGLE_REDIRECT_URI
+  );
+  oAuth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
+  return google.sheets({ version: 'v4', auth: oAuth2Client });
+}
+
+// ── Guardar reserva en Google Sheets (respaldo) ───────────────
+async function guardarEnSheets(datos) {
+  const SHEET_ID = process.env.GOOGLE_SHEET_ID;
+  if (!SHEET_ID) return; // Si no está configurado, omitir
+  try {
+    const sheets = getSheetsClient();
+    const fila = [
+      new Date().toLocaleString('es-CL', { timeZone: 'America/Santiago' }),
+      datos.reservaId || '',
+      datos.nombre || '',
+      datos.telefono || '',
+      datos.motel || '',
+      datos.tipo || '',
+      datos.fechaInicio || '',
+      datos.duracionHoras || '',
+      datos.precio ? `$${datos.precio.toLocaleString('es-CL')}` : '',
+      datos.estado || 'confirmada',
+      datos.fallback ? 'RESPALDO (Calendar falló)' : 'OK',
+    ];
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: SHEET_ID,
+      range: 'Reservas!A:K',
+      valueInputOption: 'RAW',
+      resource: { values: [fila] },
+    });
+    console.log(`📊 Reserva guardada en Sheets: ${datos.reservaId}`);
+  } catch (err) {
+    console.error('Error guardando en Sheets:', err.message);
+  }
+}
+
 // ── Google Calendar Auth ──────────────────────────────────────
 function getCalendarClient() {
   const oAuth2Client = new google.auth.OAuth2(
@@ -111,6 +153,8 @@ async function crearReserva({ nombre, telefono, tipo, fechaInicio, motel, precio
       estado: 'confirmada',
     });
 
+    // Guardar en Sheets como respaldo
+    await guardarEnSheets({ reservaId, nombre, telefono, motel, tipo, fechaInicio, duracionHoras, precio: precioFinal, estado: 'confirmada', fallback: false });
     return { ok: true, id: reservaId, googleEventId: res.data.id, precio: precioFinal, inicio, fin };
   } catch (err) {
     console.error('Error creando reserva en Google Calendar:', err.message);
@@ -119,6 +163,8 @@ async function crearReserva({ nombre, telefono, tipo, fechaInicio, motel, precio
       inicio: inicio.toISOString(), fin: fin.toISOString(),
       precio: precioFinal, estado: 'confirmada',
     });
+    // Guardar en Sheets con flag de fallback + notificar (se hace en ia.js)
+    await guardarEnSheets({ reservaId, nombre, telefono, motel, tipo, fechaInicio, duracionHoras, precio: precioFinal, estado: 'confirmada', fallback: true });
     return { ok: true, id: reservaId, precio: precioFinal, inicio, fin, fallback: true };
   }
 }
