@@ -458,7 +458,8 @@ REGLAS:
 - Tarifa SEMANA: resto del tiempo (incluye viernes antes de las 8:00 AM y domingo desde las 8:00 AM)
 - Ejemplo: viernes 2:00 AM → semana | viernes 10:00 AM → finde | domingo 7:00 AM → finde | domingo 9:00 AM → semana
 - Feriados que caen lunes-jueves: tarifa normal, pero su víspera desde las 8:00 AM es finde
-- El sistema corrige automáticamente la tarifa según la hora exacta de llegada
+- IMPORTANTE: Cuando el calendario marque un día como [VÍSPERA FERIADO - finde desde 8:00AM], ese día se cobra tarifa FINDE si la llegada es a las 8:00 AM o después. Por ejemplo, jueves 30 de abril es víspera del 1 de mayo → tarifa finde desde las 8:00 AM
+- El sistema corrige automáticamente la tarifa según la hora exacta de llegada, pero al cotizar debes usar la tarifa correcta
 - Si no hay disponibilidad, ofrece el otro motel o un horario alternativo`;
 }
 
@@ -566,7 +567,12 @@ async function procesarAccion(accion, datos, telefono) {
       const fechaLlegada = new Date(new Date(datos.fechaInicio).toLocaleString('en-US', { timeZone: 'America/Santiago' }));
       const deberiaSerFinde = esTarifaFinde(fechaLlegada);
       if (!tipo.endsWith('_24h')) {
-        tipo = deberiaSerFinde ? tipo.replace(/_semana$/, '_finde') : tipo.replace(/_finde$/, '_semana');
+        // Normalizar: asegurar que tenga sufijo _semana o _finde
+        if (!tipo.endsWith('_semana') && !tipo.endsWith('_finde')) {
+          tipo = tipo + (deberiaSerFinde ? '_finde' : '_semana');
+        } else {
+          tipo = deberiaSerFinde ? tipo.replace(/_semana$/, '_finde') : tipo.replace(/_finde$/, '_semana');
+        }
       }
       const duracionHoras = DURACIONES[tipo] || 3;
       let precio = PRECIOS[tipo] || 27000;
