@@ -82,14 +82,26 @@ function esVisperaFeriado(date) {
   return FERIADOS_CHILE.has(toFechaStr(manana));
 }
 
-// Viernes y sábado: SIEMPRE finde (aunque sean feriado)
-// Víspera de feriado (lunes-jueves): finde
-// Feriado que cae lunes-jueves: normal
-// Todo lo demás: normal
+// Tarifa finde: viernes desde las 8:00 AM hasta domingo a las 8:00 AM
+// Fuera de ese rango: tarifa semana
+// Víspera de feriado (desde las 8:00 AM del día anterior): también finde
 function esTarifaFinde(date) {
-  const dia = new Date(date.toLocaleString('en-US', { timeZone: 'America/Santiago' })).getDay();
-  if (dia === 5 || dia === 6) return true;
-  return esVisperaFeriado(date);
+  const local = new Date(date.toLocaleString('en-US', { timeZone: 'America/Santiago' }));
+  const dia = local.getDay();    // 0=dom, 1=lun, 2=mar, 3=mié, 4=jue, 5=vie, 6=sáb
+  const hora = local.getHours();
+  const min = local.getMinutes();
+  const minutosDelDia = hora * 60 + min;
+  const las8am = 8 * 60;
+
+  // Viernes desde 8:00 AM → finde
+  if (dia === 5 && minutosDelDia >= las8am) return true;
+  // Sábado completo → finde
+  if (dia === 6) return true;
+  // Domingo antes de las 8:00 AM → finde
+  if (dia === 0 && minutosDelDia < las8am) return true;
+  // Víspera de feriado desde las 8:00 AM → finde
+  if (minutosDelDia >= las8am && esVisperaFeriado(date)) return true;
+  return false;
 }
 
 function getSystemPrompt() {
@@ -117,17 +129,18 @@ function getSystemPrompt() {
     d.setDate(fechaSantiago.getDate() + i);
     const dDate = new Date(d.toLocaleString('en-US', {timeZone: 'America/Santiago'}));
     const nombreDia = diasSemana[dDate.getDay()];
-    const dia = dDate.getDate();
+    const diaNro = dDate.getDate();
     const mes = meses[dDate.getMonth()];
     const año = dDate.getFullYear();
-    const esDiaFinde = esTarifaFinde(dDate);
     const esFeriado = FERIADOS_CHILE.has(toFechaStr(dDate));
+    const diaSemana = dDate.getDay();
     let etiqueta = '';
-    if (esFeriado && (dDate.getDay() === 5 || dDate.getDay() === 6)) etiqueta = ' [FERIADO + FIN DE SEMANA]';
-    else if (esFeriado) etiqueta = ' [FERIADO - tarifa normal]';
-    else if (esVisperaFeriado(dDate)) etiqueta = ' [VÍSPERA FERIADO - tarifa finde]';
-    else if (esDiaFinde) etiqueta = ' [FIN DE SEMANA]';
-    calendarioPróximos += `- ${nombreDia} ${dia} de ${mes} de ${año}${etiqueta}\n`;
+    if (esFeriado) etiqueta = ' [FERIADO - tarifa normal]';
+    else if (diaSemana === 5) etiqueta = ' [viernes: semana hasta 7:59AM, finde desde 8:00AM]';
+    else if (diaSemana === 6) etiqueta = ' [FIN DE SEMANA - tarifa finde]';
+    else if (diaSemana === 0) etiqueta = ' [domingo: finde hasta 7:59AM, semana desde 8:00AM]';
+    else if (esVisperaFeriado(dDate)) etiqueta = ' [VÍSPERA FERIADO - finde desde 8:00AM]';
+    calendarioPróximos += `- ${nombreDia} ${diaNro} de ${mes} de ${año}${etiqueta}\n`;
   }
 
   return `Eres el asistente virtual de Motel Apolo y Motel Le Chateau, dos moteles para adultos ubicados en Providencia, Santiago de Chile. Atiendes 24/7 por WhatsApp.
@@ -340,7 +353,9 @@ LLEGADA TARDE: Si un cliente dice que llegará más tarde de la hora reservada:
 2. Notificar automáticamente al hotel con la nueva hora de llegada
 3. Confirmar al cliente que se actualizó su reserva y el nuevo número
 
-NÚMERO DE HABITACIÓN: No se asigna número de habitación al momento de la reserva. El número se asigna al llegar a recepción según disponibilidad. Si el cliente desea una habitación específica, debe llamar directamente al motel.
+NÚMERO DE HABITACIÓN: No se asigna número de habitación al momento de la reserva. El número se asigna al llegar a recepción según disponibilidad.
+- Si el cliente pregunta explícitamente por una habitación específica (ej: "quiero la habitación 5", "¿está disponible la número 3?"), responde: "Con gusto te ayudo con eso, un ejecutivo te atenderá en breve 😊" y usa [TRANSFERIR_AGENTE].
+- Solo transferir si el cliente lo pide EXPLÍCITAMENTE. No mencionarlo de forma proactiva.
 
 ESTACIONAMIENTO: No se puede reservar estacionamiento, es por orden de llegada y gratuito para clientes.
 
@@ -428,39 +443,44 @@ ${!esSinAgente() ?
 [/ACCION]
 
 TIPOS VÁLIDOS:
-- simple_3h_semana | simple_noche_semana | simple_24h
-- simple_3h_finde  | simple_noche_finde
-- vip_3h_semana    | vip_noche_semana    | vip_24h
-- vip_3h_finde     | vip_noche_finde
-- jacuzzi_3h_semana| jacuzzi_noche_semana| jacuzzi_24h
-- jacuzzi_3h_finde | jacuzzi_noche_finde
+- simple_3h_semana | simple_6x3_semana | simple_noche_semana | simple_24h
+- simple_3h_finde  | simple_6x3_finde  | simple_noche_finde
+- vip_3h_semana    | vip_6x3_semana    | vip_noche_semana    | vip_24h
+- vip_3h_finde     | vip_6x3_finde     | vip_noche_finde
+- jacuzzi_3h_semana| jacuzzi_6x3_semana| jacuzzi_noche_semana| jacuzzi_24h
+- jacuzzi_3h_finde | jacuzzi_6x3_finde | jacuzzi_noche_finde
+NOTA: Los tipos 6x3 tienen la misma tarifa que los 3h pero duración de 6 horas (promoción 6x3)
 
 REGLAS:
 - Verifica disponibilidad ANTES de confirmar
 - Si son 3 personas, el precio es el doble (solo mencionarlo si el cliente pregunta por capacidad o precio para 3 personas)
-- Aplica tarifa finde si la llegada es: viernes, sábado, o víspera de feriado chileno
-- Viernes y sábado son SIEMPRE finde (aunque coincidan con feriado)
-- Feriado que cae lunes-jueves: tarifa normal, pero su víspera es finde
-- El calendario de arriba ya indica cada día si aplica finde o no, úsalo
+- Tarifa FINDE: viernes desde las 8:00 AM, sábado completo, domingo hasta las 7:59 AM, y víspera de feriado desde las 8:00 AM
+- Tarifa SEMANA: resto del tiempo (incluye viernes antes de las 8:00 AM y domingo desde las 8:00 AM)
+- Ejemplo: viernes 2:00 AM → semana | viernes 10:00 AM → finde | domingo 7:00 AM → finde | domingo 9:00 AM → semana
+- Feriados que caen lunes-jueves: tarifa normal, pero su víspera desde las 8:00 AM es finde
+- El sistema corrige automáticamente la tarifa según la hora exacta de llegada
 - Si no hay disponibilidad, ofrece el otro motel o un horario alternativo`;
 }
 
 // ── Tabla de precios y duraciones ────────────────────────────
 const PRECIOS = {
-  simple_3h_semana: 27000, simple_noche_semana: 35000, simple_24h: 55000,
-  simple_3h_finde:  29000, simple_noche_finde:  39000,
-  vip_3h_semana:    32000, vip_noche_semana:    42000, vip_24h: 65000,
-  vip_3h_finde:     37000, vip_noche_finde:     46000,
-  jacuzzi_3h_semana:    40000, jacuzzi_noche_semana: 51000, jacuzzi_24h: 75000,
-  jacuzzi_3h_finde:     44000, jacuzzi_noche_finde:  53000,
+  simple_3h_semana: 27000, simple_6x3_semana: 27000, simple_noche_semana: 35000, simple_24h: 55000,
+  simple_3h_finde:  29000, simple_6x3_finde:  29000, simple_noche_finde:  39000,
+  vip_3h_semana:    32000, vip_6x3_semana:    32000, vip_noche_semana:    42000, vip_24h: 65000,
+  vip_3h_finde:     37000, vip_6x3_finde:     37000, vip_noche_finde:     46000,
+  jacuzzi_3h_semana: 40000, jacuzzi_6x3_semana: 40000, jacuzzi_noche_semana: 51000, jacuzzi_24h: 75000,
+  jacuzzi_3h_finde:  44000, jacuzzi_6x3_finde:  44000, jacuzzi_noche_finde:  53000,
 };
 
 const DURACIONES = {
   simple_3h_semana: 3,  simple_3h_finde: 3,
+  simple_6x3_semana: 6, simple_6x3_finde: 6,
   simple_noche_semana: 12, simple_noche_finde: 12, simple_24h: 24,
   vip_3h_semana: 3, vip_3h_finde: 3,
+  vip_6x3_semana: 6, vip_6x3_finde: 6,
   vip_noche_semana: 12, vip_noche_finde: 12, vip_24h: 24,
   jacuzzi_3h_semana: 3, jacuzzi_3h_finde: 3,
+  jacuzzi_6x3_semana: 6, jacuzzi_6x3_finde: 6,
   jacuzzi_noche_semana: 12, jacuzzi_noche_finde: 12, jacuzzi_24h: 24,
 };
 

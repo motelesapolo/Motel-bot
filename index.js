@@ -76,6 +76,10 @@ cliente.on('message', async (mensaje) => {
   if (mensaje.from.includes('@g.us')) return;
   if (mensaje.fromMe) return;
   if (mensaje.from === 'status@broadcast') return;
+  // Filtrar newsletters, canales y mensajes de sistema que no tienen estructura normal
+  if (mensaje.from.includes('@newsletter')) return;
+  if (mensaje.type === 'e2e_notification' || mensaje.type === 'notification_template') return;
+  if (!mensaje.from || !mensaje.body === undefined) return;
 
   const rawFrom = mensaje.from || '';
   const telefono = rawFrom.replace('@c.us', '').replace('@lid', '');
