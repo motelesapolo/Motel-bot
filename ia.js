@@ -199,15 +199,21 @@ IMPORTANTE SOBRE EL ACCESO:
 🛏️ HABITACIONES Y PRECIOS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-TARIFA SEMANA (domingo a jueves):
-🏠 Simple:  Momento/3h $27.000 | 12h/noche $35.000 | 24h $55.000
-⭐ VIP:     Momento/3h $32.000 | 12h/noche $42.000 | 24h $65.000
-🛁 Jacuzzi: Momento/3h $40.000 | 12h/noche $51.000 | 24h $75.000
+TARIFA SEMANA (domingo 8:00 AM a viernes 7:59 AM):
+🏠 Simple:  3h $27.000 | Noche $35.000 | 24h $55.000
+⭐ VIP:     3h $32.000 | Noche $42.000 | 24h $65.000
+🛁 Jacuzzi: 3h $40.000 | Noche $51.000 | 24h $75.000
 
-TARIFA FIN DE SEMANA (viernes, sábado y vísperas de festivos):
-🏠 Simple:  Momento/3h $29.000 | 12h/noche $39.000 | 24h $55.000
-⭐ VIP:     Momento/3h $37.000 | 12h/noche $46.000 | 24h $65.000
-🛁 Jacuzzi: Momento/3h $44.000 | 12h/noche $53.000 | 24h $75.000
+TARIFA FIN DE SEMANA (viernes 8:00 AM a domingo 7:59 AM, y vísperas de feriado):
+🏠 Simple:  3h $29.000 | Noche $39.000 | 24h $55.000
+⭐ VIP:     3h $37.000 | Noche $46.000 | 24h $65.000
+🛁 Jacuzzi: 3h $44.000 | Noche $53.000 | 24h $75.000
+
+NOTA IMPORTANTE SOBRE PAQUETES:
+- NOCHE: entra desde las 22:00, sale a las 12:00 del día siguiente. Solo para ese horario.
+- 12 HORAS: 12 horas corridas desde CUALQUIER hora. Mismo precio que noche. Solo mencionarlo si el cliente pregunta.
+- 24 HORAS: desde cualquier hora, mismo precio semana y finde.
+- PROMOCIÓN 6x3: pagas 3h y te quedas 6h. Disponible para cualquier tipo de habitación.
 
 PRECIO PARA 3 PERSONAS: El doble del precio normal.
 Ejemplo: Simple semana 3h normalmente $27.000 → con 3 personas $54.000
@@ -222,11 +228,6 @@ PROMOCIÓN $22.000 de MotelNow:
 - Esta promoción es EXCLUSIVA de MotelNow, nosotros no la gestionamos
 - Para esta promo el cliente debe comunicarse directamente con MotelNow
 - Para cualquier duda de esa promoción, también dirigirse a MotelNow
-
-HORAS EXTRAS:
-- Se pueden pedir máximo 2 horas extras por estadía
-- Si quieren quedarse más, deben pagar una estadía completa (momento 3h, 12h o 24h)
-- También pueden usar la promoción 6x3 para las horas extras
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📋 DESCRIPCIÓN DE HABITACIONES
@@ -298,8 +299,14 @@ CAPACIDAD DE HABITACIONES:
 - Si no hay disponibilidad para el tipo/motel solicitado, ofrecer el otro motel o un horario diferente
 - Si tampoco hay disponibilidad en el otro motel, decir: "Lo sentimos, no tenemos disponibilidad para ese horario. Te invitamos a llamarnos directamente al +56 9 4567 6410 (Apolo anexo 710 / Le Chateau anexo 210) para revisar opciones o hablar con un agente."
 
+HORARIOS DE ESTADÍA:
+- NOCHE: entra desde las 22:00, sale a las 12:00 del día siguiente (sin excepción). Si el cliente pide noche a una hora distinta de las 22:00 (ej: 16:00, 18:00), decirle amablemente que ese horario no corresponde al paquete noche y ofrecerle las opciones correctas: puede reservar noche a partir de las 22:00, o reservar 3h/6h/24h si quiere llegar antes.
+- 12 HORAS: 12 horas corridas desde cualquier hora del día. Mismo precio que noche. Solo mencionarlo si el cliente pregunta explícitamente.
+- 3 HORAS: cualquier hora.
+- 24 HORAS: cualquier hora.
+
 POLÍTICA DE SALIDAS:
-- Habitaciones por momento (3h), por noche y por 12 horas: en general no se puede salir y volver a entrar. Sin embargo, si necesitan salir, puede hacerlo UNA persona. Solo si preguntan.
+- Habitaciones por momento (3h), noche y 12 horas: en general no se puede salir y volver a entrar. Sin embargo, puede hacerlo UNA persona. Solo si preguntan.
 - Habitaciones por 24 horas: SÍ se puede salir y volver a entrar durante el período contratado.
 - Solo mencionar el máximo de 3 personas si el cliente lo pregunta explícitamente. No mencionarlo de forma proactiva.
 
@@ -317,7 +324,7 @@ MEDIOS DE PAGO: El pago se realiza al llegar a recepción. Se acepta efectivo, t
 HORAS EXTRAS:
 - Se pueden solicitar máximo 2 horas extras por estadía
 - Precio por hora extra: Simple $5.000 | VIP $6.000 | Jacuzzi $7.000
-- Si quieren quedarse más de 2 horas extra, deben pagar una estadía completa (momento 3h, 12h o 24h)
+- Si quieren quedarse más de 2 horas extra, deben pagar una estadía completa (3h, noche o 24h)
 - También pueden usar la promoción 6x3 para esto
 
 TELÉFONO DEL MOTEL: +56 9 4567 6410 (disponible 24/7)
@@ -416,7 +423,7 @@ ${!esSinAgente() ?
 1. Saludar con "${saludo}, ¿en qué podemos ayudarte? 😊"
 2. Preguntar motel (Apolo o Le Chateau) si no lo menciona
 3. Preguntar tipo de habitación (Simple, VIP o Jacuzzi)
-4. Preguntar duración (momento/3h, 6h con promo, 12h/noche o 24h)
+4. Preguntar duración (3h, 6h con promo 6x3, noche o 24h) — NO mencionar las 12h a menos que el cliente pregunte
 5. Preguntar fecha y hora de llegada
    - Si el cliente menciona una hora SIN AM/PM ni formato 24h (ej: "las 10", "las 11"), SIEMPRE preguntar: "¿Esa hora es AM o PM?" — NUNCA asumir
    - Si dice "22:00", "23:00" u otro formato 24h claro, no preguntar
@@ -454,12 +461,12 @@ NOTA: Los tipos 6x3 tienen la misma tarifa que los 3h pero duración de 6 horas 
 REGLAS:
 - Verifica disponibilidad ANTES de confirmar
 - Si son 3 personas, el precio es el doble (solo mencionarlo si el cliente pregunta por capacidad o precio para 3 personas)
-- Tarifa FINDE: viernes desde las 8:00 AM, sábado completo, domingo hasta las 7:59 AM, y víspera de feriado desde las 8:00 AM
-- Tarifa SEMANA: resto del tiempo (incluye viernes antes de las 8:00 AM y domingo desde las 8:00 AM)
-- Ejemplo: viernes 2:00 AM → semana | viernes 10:00 AM → finde | domingo 7:00 AM → finde | domingo 9:00 AM → semana
-- Feriados que caen lunes-jueves: tarifa normal, pero su víspera desde las 8:00 AM es finde
-- IMPORTANTE: Cuando el calendario marque un día como [VÍSPERA FERIADO - finde desde 8:00AM], ese día se cobra tarifa FINDE si la llegada es a las 8:00 AM o después. Por ejemplo, jueves 30 de abril es víspera del 1 de mayo → tarifa finde desde las 8:00 AM
-- El sistema corrige automáticamente la tarifa según la hora exacta de llegada, pero al cotizar debes usar la tarifa correcta
+- El sistema calcula automáticamente la tarifa correcta (semana o finde) según la fecha y hora exacta
+- No expliques al cliente los detalles de cuándo cambia la tarifa, solo indica el precio correcto
+- SIEMPRE manda la fecha completa con hora en fechaInicio (ej: "2026-04-20T23:00:00"), NUNCA solo la fecha sin hora
+- No hay restricción de horario general — se puede reservar a cualquier hora
+- EXCEPCIÓN: el paquete NOCHE solo puede reservarse para llegada desde las 22:00. Si el cliente pide noche a otra hora, el sistema devolverá NOCHE_HORA_INVALIDA
+- Si el sistema responde NOCHE_HORA_INVALIDA: dile al cliente que el paquete noche es solo desde las 22:00 y ofrécele las alternativas (3h, 6x3, o noche a las 22:00)
 - Si no hay disponibilidad, ofrece el otro motel o un horario alternativo`;
 }
 
@@ -554,12 +561,16 @@ async function procesarAccion(accion, datos, telefono) {
       return `RESULTADO_DISPONIBILIDAD: ${JSON.stringify(result)}`;
     }
     case 'crear_reserva': {
-      // Validar que la hora no sea en el pasado
-      const ahoraChile = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Santiago' }));
-      const fechaLlegadaCheck = new Date(new Date(datos.fechaInicio).toLocaleString('en-US', { timeZone: 'America/Santiago' }));
-      if (fechaLlegadaCheck < ahoraChile) {
-        return 'RESULTADO_RESERVA: {"ok": false, "error": "HORA_EN_PASADO"}';
+      // Si fechaInicio no tiene hora, usar la hora actual en Santiago
+      let fechaInicio = datos.fechaInicio || '';
+      if (fechaInicio && !fechaInicio.includes('T')) {
+        const local = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Santiago' }));
+        const hh = String(local.getHours()).padStart(2, '0');
+        const mm = String(local.getMinutes()).padStart(2, '0');
+        fechaInicio = `${fechaInicio}T${hh}:${mm}:00`;
+        console.log(`⚠️ Fecha sin hora corregida a: ${fechaInicio}`);
       }
+      datos = { ...datos, fechaInicio };
 
       // Corregir tipo automáticamente según fecha real Santiago
       // Fix zona horaria cruce medianoche: convertir siempre a hora local Santiago
@@ -583,6 +594,14 @@ async function procesarAccion(accion, datos, telefono) {
       if (!datos.esModificacion && reservasEnProgreso.has(telefono)) {
         const idExistente = reservasEnProgreso.get(telefono);
         return `RESULTADO_RESERVA: {"ok": false, "error": "RESERVA_DUPLICADA", "reservaExistente": "${idExistente}"}`;
+      }
+
+      // Validar que paquete noche solo sea desde las 22:00
+      if (tipo.includes('_noche')) {
+        const horaLlegada = new Date(new Date(datos.fechaInicio).toLocaleString('en-US', { timeZone: 'America/Santiago' })).getHours();
+        if (horaLlegada < 22) {
+          return 'RESULTADO_RESERVA: {"ok": false, "error": "NOCHE_HORA_INVALIDA"}';
+        }
       }
 
       const disp = await consultarDisponibilidad(datos.fechaInicio, duracionHoras);
