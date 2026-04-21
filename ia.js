@@ -174,7 +174,7 @@ No des explicaciones largas. Concreta rápido.` : ''}
 - Si no sabes algo, ofreces transferir con un agente
 - NUNCA inventes ni supongas información que no esté en estas instrucciones. Si no sabes algo responde: "No tengo esa información, pero puedes consultarlo al +56 9 4567 6410 😊"
 - NO uses tu conocimiento general para rellenar vacíos. Solo lo que está aquí.
-- ESTILO DE RESPUESTA: Breve, preciso y empático. Sin párrafos largos ni explicaciones innecesarias. Ve directo al punto. Si puede decirse en una línea, en una línea. Nunca des más información de la que te piden.
+- ESTILO DE RESPUESTA: Muy breve y directo. Máximo 3 líneas por respuesta salvo en resúmenes de reserva. Sin listas largas, sin negritas, sin explicaciones que el cliente no pidió. Una pregunta a la vez. Responde lo que te preguntan, nada más.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🏨 LOS MOTELES
@@ -390,15 +390,11 @@ CARTA DE PRECIOS:
 - NUNCA envíes este enlace para fotos de habitaciones — para eso existe la acción enviar_fotos.
 
 FOTOS DE HABITACIONES:
-- Si el cliente pide fotos de habitaciones, usa la acción enviar_fotos indicando motel y tipo.
-- Si no especifica motel, pregunta primero: "¿Las fotos son de Motel Apolo o Le Chateau?"
-- Si no especifica tipo, pregunta: "¿Quieres ver fotos de habitación Simple, VIP o Jacuzzi?"
-- Una vez que tengas motel y tipo usa la acción. Valores válidos:
-  motel: "apolo" o "lechateau" | tipo: "simple", "vip" o "jacuzzi"
-[ACCION:enviar_fotos]
-{"motel": "apolo", "tipo": "simple"}
-[/ACCION]
-- Después de enviar las fotos di algo como: "¡Aquí van las fotos! 😊 ¿Te gustaría reservar?"
+- Si pide fotos de un tipo específico: usa enviar_fotos con motel y tipo
+- Si pide fotos de TODAS las habitaciones de un motel: usa enviar_fotos con tipo "todas"
+- Si no especifica motel, pregunta primero cuál motel
+- Valores válidos: motel: "apolo" o "lechateau" | tipo: "simple", "vip", "jacuzzi" o "todas"
+- Después de las fotos pregunta brevemente si desea reservar
 
 RECLAMOS: servicioalcliente@motelesapolo.cl (lunes a viernes 9:00 a 17:00 hrs)
 
@@ -596,10 +592,11 @@ async function procesarAccion(accion, datos, telefono) {
         return `RESULTADO_RESERVA: {"ok": false, "error": "RESERVA_DUPLICADA", "reservaExistente": "${idExistente}"}`;
       }
 
-      // Validar que paquete noche solo sea desde las 22:00
+      // Validar que paquete noche solo sea en horario válido: 22:00 a 12:00
+      // Rechazar solo si la hora está entre 12:01 y 21:59
       if (tipo.includes('_noche')) {
         const horaLlegada = new Date(new Date(datos.fechaInicio).toLocaleString('en-US', { timeZone: 'America/Santiago' })).getHours();
-        if (horaLlegada < 22) {
+        if (horaLlegada >= 13 && horaLlegada < 22) {
           return 'RESULTADO_RESERVA: {"ok": false, "error": "NOCHE_HORA_INVALIDA"}';
         }
       }
@@ -663,6 +660,12 @@ Datos: ${datos.motel} | ${tipoLabel} | ${datos.fechaInicio} | $${precio.toLocale
         apolo:     { simple: 10, vip: 9, jacuzzi: 7 },
         lechateau: { simple: 5,  vip: 6, jacuzzi: 4 },
       };
+      // Si pide "todas" o "todo", retornar los tres tipos
+      if (tipo === 'todas' || tipo === 'todo' || tipo === 'all' || tipo === '') {
+        const tipos = ['simple', 'vip', 'jacuzzi'];
+        const resultado = tipos.map(t => ({ tipo: t, cantidad: cantidades[motel][t] }));
+        return `RESULTADO_FOTOS: {"ok": true, "motel": "${motel}", "todas": true, "tipos": ${JSON.stringify(resultado)}}`;
+      }
       const cantidad = cantidades[motel]?.[tipo] || 0;
       if (cantidad === 0) return 'RESULTADO_FOTOS: {"ok": false, "error": "Tipo o motel inválido"}';
       return `RESULTADO_FOTOS: {"ok": true, "motel": "${motel}", "tipo": "${tipo}", "cantidad": ${cantidad}}`;
