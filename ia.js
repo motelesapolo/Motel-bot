@@ -209,11 +209,7 @@ TARIFA FIN DE SEMANA (viernes 8:00 AM a domingo 7:59 AM, y vísperas de feriado)
 ⭐ VIP:     3h $37.000 | Noche $46.000 | 24h $65.000
 🛁 Jacuzzi: 3h $44.000 | Noche $53.000 | 24h $75.000
 
-NOTA IMPORTANTE SOBRE PAQUETES:
-- VALOR NOCHE: llegada entre 22:00 y 12:00 (madrugada incluida), salida siempre a las 12:00.
-- 12 HORAS: 12 horas corridas desde CUALQUIER hora. Mismo precio que noche. Solo mencionarlo si el cliente pregunta.
-- 24 HORAS: desde cualquier hora, mismo precio semana y finde.
-- PROMOCIÓN 6x3: pagas 3h y te quedas 6h. Disponible para cualquier tipo de habitación.
+
 
 PRECIO PARA 3 PERSONAS: El doble del precio normal.
 Ejemplo: Simple semana 3h normalmente $27.000 → con 3 personas $54.000
@@ -301,7 +297,7 @@ CAPACIDAD DE HABITACIONES:
 
 HORARIOS DE ESTADÍA:
 - VALOR NOCHE: el cliente puede llegar entre las 22:00 y las 12:00 (incluye madrugada: 23:00, 00:00, 01:00, etc.). La salida es SIEMPRE a las 12:00 del día siguiente sin importar la hora de entrada. Nunca rechazar este paquete si la hora está entre 22:00 y 12:00.
-- Si el cliente pide valor noche y su hora de llegada está entre las 13:00 y las 21:59 (ej: 16:00, 18:00): informarle amablemente que el horario de noche parte a las 22:00 y ofrecerle las 12 horas o las 24 horas como alternativa. NO rechazar, solo informar y ofrecer.
+- Si el cliente pide valor noche y su hora de llegada está entre las 13:00 y las 21:59, el sistema devolverá NOCHE_HORA_INVALIDA. Responder: "El horario de noche parte a las 22:00 y termina a las 12:00. ¿Te acomoda llegar a las 22:00 o prefieres las 12 horas desde ese horario?"
 - 12 HORAS: 12 horas corridas desde cualquier hora. Solo mencionarlo si el cliente pregunta explícitamente.
 - 3 HORAS: cualquier hora.
 - 24 HORAS: cualquier hora.
@@ -365,7 +361,6 @@ NÚMERO DE HABITACIÓN: No se asigna número de habitación al momento de la res
 - Si el cliente pregunta explícitamente por una habitación específica (ej: "quiero la habitación 5", "¿está disponible la número 3?"), responde: "Con gusto te ayudo con eso, un ejecutivo te atenderá en breve 😊" y usa [TRANSFERIR_AGENTE].
 - Solo transferir si el cliente lo pide EXPLÍCITAMENTE. No mencionarlo de forma proactiva.
 
-ESTACIONAMIENTO: No se puede reservar estacionamiento, es por orden de llegada y gratuito para clientes.
 
 ACCESIBILIDAD (solo si preguntan): Lamentablemente no contamos con instalaciones adecuadas para personas en silla de ruedas.
 
@@ -567,6 +562,13 @@ async function procesarAccion(accion, datos, telefono) {
         console.log(`⚠️ Fecha sin hora corregida a: ${fechaInicio}`);
       }
       datos = { ...datos, fechaInicio };
+
+      // Validar hora para paquete noche: solo entre 22:00 y 12:00
+      const horaCheck = new Date(new Date(datos.fechaInicio).toLocaleString('en-US', { timeZone: 'America/Santiago' })).getHours();
+      const tipoCheck = (datos.tipo || '').toLowerCase();
+      if (tipoCheck.includes('_noche') && horaCheck >= 13 && horaCheck < 22) {
+        return 'RESULTADO_RESERVA: {"ok": false, "error": "NOCHE_HORA_INVALIDA"}';
+      }
 
       // Corregir tipo automáticamente según fecha real Santiago
       // Fix zona horaria cruce medianoche: convertir siempre a hora local Santiago
