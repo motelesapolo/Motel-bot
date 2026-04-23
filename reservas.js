@@ -91,7 +91,22 @@ function parsearFechaSantiago(fechaStr) {
 async function crearReserva({ nombre, telefono, tipo, fechaInicio, motel, precio, duracionHoras, reservaIdExistente, googleEventIdExistente }) {
   const inicio = parsearFechaSantiago(fechaInicio);
   const horas = duracionHoras || 3;
-  const fin = new Date(inicio.getTime() + horas * 60 * 60 * 1000);
+  let fin;
+  // Para paquete noche: salida siempre a las 12:00 del día siguiente
+  if (tipo && tipo.toLowerCase().includes('noche')) {
+    const finNoche = new Date(inicio);
+    // Si la hora de entrada es >= 12, la salida es al día siguiente a las 12:00
+    // Si la hora de entrada es < 12 (madrugada), la salida es ese mismo día a las 12:00
+    const horaEntrada = new Date(inicio.toLocaleString('en-US', { timeZone: 'America/Santiago' })).getHours();
+    if (horaEntrada >= 12) {
+      finNoche.setDate(finNoche.getDate() + 1);
+    }
+    // Setear a las 12:00 Santiago
+    const finStr = finNoche.toLocaleDateString('en-CA', { timeZone: 'America/Santiago' });
+    fin = parsearFechaSantiago(finStr + 'T12:00:00');
+  } else {
+    fin = new Date(inicio.getTime() + horas * 60 * 60 * 1000);
+  }
 
   // Si es una modificación, reutilizar el ID anterior y borrar el evento anterior de Calendar
   const reservaId = reservaIdExistente || generarIdReserva();

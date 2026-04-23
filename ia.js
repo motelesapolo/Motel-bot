@@ -210,7 +210,7 @@ TARIFA FIN DE SEMANA (viernes 8:00 AM a domingo 7:59 AM, y vísperas de feriado)
 🛁 Jacuzzi: 3h $44.000 | Noche $53.000 | 24h $75.000
 
 NOTA IMPORTANTE SOBRE PAQUETES:
-- NOCHE: entra desde las 22:00, sale a las 12:00 del día siguiente. Solo para ese horario.
+- VALOR NOCHE: llegada entre 22:00 y 12:00 (madrugada incluida), salida siempre a las 12:00.
 - 12 HORAS: 12 horas corridas desde CUALQUIER hora. Mismo precio que noche. Solo mencionarlo si el cliente pregunta.
 - 24 HORAS: desde cualquier hora, mismo precio semana y finde.
 - PROMOCIÓN 6x3: pagas 3h y te quedas 6h. Disponible para cualquier tipo de habitación.
@@ -300,8 +300,9 @@ CAPACIDAD DE HABITACIONES:
 - Si tampoco hay disponibilidad en el otro motel, decir: "Lo sentimos, no tenemos disponibilidad para ese horario. Te invitamos a llamarnos directamente al +56 9 4567 6410 (Apolo anexo 710 / Le Chateau anexo 210) para revisar opciones o hablar con un agente."
 
 HORARIOS DE ESTADÍA:
-- NOCHE: entra desde las 22:00, sale a las 12:00 del día siguiente (sin excepción). Si el cliente pide noche a una hora distinta de las 22:00 (ej: 16:00, 18:00), decirle amablemente que ese horario no corresponde al paquete noche y ofrecerle las opciones correctas: puede reservar noche a partir de las 22:00, o reservar 3h/6h/24h si quiere llegar antes.
-- 12 HORAS: 12 horas corridas desde cualquier hora del día. Mismo precio que noche. Solo mencionarlo si el cliente pregunta explícitamente.
+- VALOR NOCHE: el cliente puede llegar entre las 22:00 y las 12:00 (incluye madrugada: 23:00, 00:00, 01:00, etc.). La salida es SIEMPRE a las 12:00 del día siguiente sin importar la hora de entrada. Nunca rechazar este paquete si la hora está entre 22:00 y 12:00.
+- Si el cliente pide valor noche y su hora de llegada está entre las 13:00 y las 21:59 (ej: 16:00, 18:00): informarle amablemente que el horario de noche parte a las 22:00 y ofrecerle las 12 horas o las 24 horas como alternativa. NO rechazar, solo informar y ofrecer.
+- 12 HORAS: 12 horas corridas desde cualquier hora. Solo mencionarlo si el cliente pregunta explícitamente.
 - 3 HORAS: cualquier hora.
 - 24 HORAS: cualquier hora.
 
@@ -461,8 +462,7 @@ REGLAS:
 - No expliques al cliente los detalles de cuándo cambia la tarifa, solo indica el precio correcto
 - SIEMPRE manda la fecha completa con hora en fechaInicio (ej: "2026-04-20T23:00:00"), NUNCA solo la fecha sin hora
 - No hay restricción de horario general — se puede reservar a cualquier hora
-- EXCEPCIÓN: el paquete NOCHE solo puede reservarse para llegada desde las 22:00. Si el cliente pide noche a otra hora, el sistema devolverá NOCHE_HORA_INVALIDA
-- Si el sistema responde NOCHE_HORA_INVALIDA: dile al cliente que el paquete noche es solo desde las 22:00 y ofrécele las alternativas (3h, 6x3, o noche a las 22:00)
+
 - Si no hay disponibilidad, ofrece el otro motel o un horario alternativo`;
 }
 
@@ -590,15 +590,6 @@ async function procesarAccion(accion, datos, telefono) {
       if (!datos.esModificacion && reservasEnProgreso.has(telefono)) {
         const idExistente = reservasEnProgreso.get(telefono);
         return `RESULTADO_RESERVA: {"ok": false, "error": "RESERVA_DUPLICADA", "reservaExistente": "${idExistente}"}`;
-      }
-
-      // Validar que paquete noche solo sea en horario válido: 22:00 a 12:00
-      // Rechazar solo si la hora está entre 12:01 y 21:59
-      if (tipo.includes('_noche')) {
-        const horaLlegada = new Date(new Date(datos.fechaInicio).toLocaleString('en-US', { timeZone: 'America/Santiago' })).getHours();
-        if (horaLlegada >= 13 && horaLlegada < 22) {
-          return 'RESULTADO_RESERVA: {"ok": false, "error": "NOCHE_HORA_INVALIDA"}';
-        }
       }
 
       const disp = await consultarDisponibilidad(datos.fechaInicio, duracionHoras);
