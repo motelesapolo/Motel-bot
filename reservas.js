@@ -289,4 +289,5 @@ module.exports = {
   cancelarReserva,
   obtenerReservasProximas,
   formatearFecha,
+  parsearFechaSantiago,
 };

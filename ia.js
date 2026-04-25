@@ -7,6 +7,7 @@ const {
   crearReserva,
   consultarDisponibilidad,
   cancelarReserva,
+  parsearFechaSantiago,
 } = require('./reservas');
 require('dotenv').config();
 
@@ -296,11 +297,13 @@ CAPACIDAD DE HABITACIONES:
 - Si tampoco hay disponibilidad en el otro motel, decir: "Lo sentimos, no tenemos disponibilidad para ese horario. Te invitamos a llamarnos directamente al +56 9 4567 6410 (Apolo anexo 710 / Le Chateau anexo 210) para revisar opciones o hablar con un agente."
 
 HORARIOS DE ESTADÍA:
-- VALOR NOCHE: el cliente puede llegar entre las 22:00 y las 12:00 (incluye madrugada: 23:00, 00:00, 01:00, etc.). La salida es SIEMPRE a las 12:00 del día siguiente sin importar la hora de entrada. Nunca rechazar este paquete si la hora está entre 22:00 y 12:00.
-- Si el cliente pide valor noche y su hora de llegada está entre las 13:00 y las 21:59, el sistema devolverá NOCHE_HORA_INVALIDA. Responder: "El horario de noche parte a las 22:00 y termina a las 12:00. ¿Te acomoda llegar a las 22:00 o prefieres las 12 horas desde ese horario?"
-- 12 HORAS: 12 horas corridas desde cualquier hora. Solo mencionarlo si el cliente pregunta explícitamente.
-- 3 HORAS: cualquier hora.
-- 24 HORAS: cualquier hora.
+- VALOR NOCHE: entrada 22:00, 23:00 o 00:00 → salida siempre 12:00. Crear reserva directamente.
+- VALOR NOCHE desde las 01:00 hasta las 12:00: sugerir 12 horas porque le conviene más al pasajero (tendrá más tiempo). Si el pasajero insiste en noche, crearlo igual sin poner problemas. Salida siempre a las 12:00.
+- VALOR NOCHE entre 13:00 y 21:59: informar que el horario de noche parte a las 22:00. Ofrecer la alternativa más conveniente según la hora (ej: si son las 15:00 ofrecer 3h o 6x3, si son las 19:00 ofrecer 3h o esperar a las 22:00). Si insiste en noche, crear igual con salida 12:00.
+- NUNCA rechazar una reserva por la hora. Solo sugerir lo más conveniente para el pasajero.
+- 12 HORAS: 12 horas corridas desde cualquier hora. Solo mencionar si el cliente pregunta.
+- 3 HORAS y 6x3: cualquier hora, sin cambios.
+- 24 HORAS: cualquier hora, sin cambios.
 
 POLÍTICA DE SALIDAS:
 - Habitaciones por momento (3h), noche y 12 horas: en general no se puede salir y volver a entrar. Sin embargo, puede hacerlo UNA persona. Solo si preguntan.
@@ -563,18 +566,13 @@ async function procesarAccion(accion, datos, telefono) {
       }
       datos = { ...datos, fechaInicio };
 
-      // Validar hora para paquete noche: solo entre 22:00 y 12:00
-      const horaCheck = new Date(new Date(datos.fechaInicio).toLocaleString('en-US', { timeZone: 'America/Santiago' })).getHours();
-      const tipoCheck = (datos.tipo || '').toLowerCase();
-      if (tipoCheck.includes('_noche') && horaCheck >= 13 && horaCheck < 22) {
-        return 'RESULTADO_RESERVA: {"ok": false, "error": "NOCHE_HORA_INVALIDA"}';
-      }
-
       // Corregir tipo automáticamente según fecha real Santiago
       // Fix zona horaria cruce medianoche: convertir siempre a hora local Santiago
       let tipo = datos.tipo || 'simple_3h_semana';
-      const fechaLlegada = new Date(new Date(datos.fechaInicio).toLocaleString('en-US', { timeZone: 'America/Santiago' }));
-      const deberiaSerFinde = esTarifaFinde(fechaLlegada);
+      // Usar parsearFechaSantiago para evitar desfase de timezone
+      const fechaLlegada = parsearFechaSantiago(datos.fechaInicio);
+      const fechaLlegadaLocal = new Date(fechaLlegada.toLocaleString('en-US', { timeZone: 'America/Santiago' }));
+      const deberiaSerFinde = esTarifaFinde(fechaLlegadaLocal);
       if (!tipo.endsWith('_24h')) {
         // Normalizar: asegurar que tenga sufijo _semana o _finde
         if (!tipo.endsWith('_semana') && !tipo.endsWith('_finde')) {
