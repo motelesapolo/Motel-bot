@@ -25,40 +25,45 @@ async function enviarRecordatorios() {
     const reservasProximas = await obtenerReservasProximas(2);
 
     for (const evento of reservasProximas) {
-      // Extraer teléfono de la descripción del evento
-      const telefonoMatch = evento.description?.match(/📱 Teléfono: (\+?\d+)/);
+      // Extraer datos del formato actual de descripción
+      // Formato: "👤 Cliente: Nombre\n🔖 N° Reserva: XXXXXX\n🏨 Motel: ..."
       const nombreMatch = evento.description?.match(/👤 Cliente: (.+)/);
-      const habitacionMatch = evento.summary?.match(/Hab\.(\d+)/);
+      const reservaMatch = evento.description?.match(/🔖 N° Reserva: (\d+)/);
+      const motelMatch = evento.description?.match(/🏨 Motel: (.+)/);
+      const telefonoMatch = evento.description?.match(/📱 Teléfono: (\+?\d+)/);
 
-      if (!telefonoMatch) continue;
+      // Sin nombre ni número de reserva no podemos enviar recordatorio útil
+      if (!nombreMatch || !reservaMatch) continue;
 
-      const telefono = telefonoMatch[1].replace(/\D/g, '');
-      const nombre = nombreMatch ? nombreMatch[1] : 'Estimado/a';
-      const habitacion = habitacionMatch ? habitacionMatch[1] : '?';
+      const nombre = nombreMatch[1].trim();
+      const reservaId = reservaMatch[1].trim();
+      const motelNombre = motelMatch ? motelMatch[1].trim() : (process.env.MOTEL_NOMBRE || 'el motel');
       const horaInicio = formatearFecha(evento.start.dateTime);
 
-      // Verificar si ya se envió recordatorio (usando ID del evento)
+      // Verificar si ya se envió recordatorio
       const yaEnviado = recordatoriosEnviados.has(evento.id);
       if (yaEnviado) continue;
 
       const mensaje = [
-        `📅 *Recordatorio de Reserva*`,
-        ``,
-        `Hola ${nombre} 👋`,
-        `Te recordamos que tienes una reserva en *${process.env.MOTEL_NOMBRE}*:`,
-        ``,
-        `🛏️ Habitación: ${habitacion}`,
-        `🕐 Llegada: ${horaInicio}`,
-        `📍 Dirección: ${process.env.MOTEL_DIRECCION}`,
-        ``,
-        `¡Te esperamos! Si necesitas cancelar o cambiar tu reserva, responde este mensaje.`,
+        `Hola ${nombre} 👋 Te recordamos tu reserva en ${motelNombre}:`,
+        `📅 Llegada: ${horaInicio}`,
+        `🔖 N° Reserva: ${reservaId}`,
+        `Si necesitas cancelar o cambiar, responde este mensaje.`,
       ].join('\n');
+
+      // Enviar solo si tenemos teléfono (guardado en descripción en reservas antiguas)
+      // o intentar extraerlo del summary si aplica
+      const telefono = telefonoMatch ? telefonoMatch[1].replace(/\D/g, '') : null;
+      if (!telefono) {
+        console.log(`⚠️ Reserva ${reservaId} sin teléfono en Calendar — recordatorio omitido`);
+        continue;
+      }
 
       try {
         const chatId = `${telefono}@c.us`;
         await clienteWhatsApp.sendMessage(chatId, mensaje);
         recordatoriosEnviados.add(evento.id);
-        console.log(`📨 Recordatorio enviado a ${telefono}`);
+        console.log(`📨 Recordatorio enviado a ${telefono} (reserva ${reservaId})`);
       } catch (err) {
         console.error(`Error enviando recordatorio a ${telefono}:`, err.message);
       }

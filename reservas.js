@@ -200,7 +200,17 @@ function getCapacidad(motel, tipoHab) {
 // ── Consultar disponibilidad ──────────────────────────────────
 async function consultarDisponibilidad(fechaInicio, duracionHoras = 3, motel = '', tipoHab = '') {
   const inicio = parsearFechaSantiago(fechaInicio);
-  const fin = new Date(inicio.getTime() + duracionHoras * 60 * 60 * 1000);
+  // Para noche: fin = 12:00 del día siguiente (igual que crearReserva)
+  let fin;
+  if (tipoHab && tipoHab.toLowerCase().includes('noche')) {
+    const finNoche = new Date(inicio);
+    const horaEntrada = new Date(inicio.toLocaleString('en-US', { timeZone: 'America/Santiago' })).getHours();
+    if (horaEntrada >= 12) finNoche.setDate(finNoche.getDate() + 1);
+    const finStr = finNoche.toLocaleDateString('en-CA', { timeZone: 'America/Santiago' });
+    fin = parsearFechaSantiago(finStr + 'T12:00:00');
+  } else {
+    fin = new Date(inicio.getTime() + duracionHoras * 60 * 60 * 1000);
+  }
   const totalHabitaciones = getCapacidad(motel, tipoHab);
 
   try {
