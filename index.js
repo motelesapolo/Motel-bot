@@ -96,8 +96,9 @@ cliente.on('message', async (mensaje) => {
   console.log(`📩 [${new Date().toLocaleTimeString('es-CL')}] De ${telefono}: ${texto}`);
 
   // Algunos números llegan con formato @lid - mapear al número real
-  const LID_ADMINS = ['202902928908358']; // @lid del +56991655665
-  const ADMINS = [process.env.ADMIN_NUMERO, '56991655665', '56999644093', ...LID_ADMINS].filter(Boolean);
+  const LID_ADMINS = (process.env.ADMIN_LID || '202902928908358').split(',');
+  const ADMINS_EXTRA = process.env.ADMINS_EXTRA ? process.env.ADMINS_EXTRA.split(',') : ['56991655665', '56999644093'];
+  const ADMINS = [process.env.ADMIN_NUMERO, ...ADMINS_EXTRA, ...LID_ADMINS].filter(Boolean);
 
   // ── Comandos Admin ────────────────────────────────────────
   if (ADMINS.includes(telefono)) {
@@ -187,14 +188,18 @@ cliente.on('message', async (mensaje) => {
       const enviarTipoFotos = async (tipo, cantidad) => {
         const nombreTipo = tipo.charAt(0).toUpperCase() + tipo.slice(1);
         await cliente.sendMessage(chatId, `🛏️ ${nombreTipo} - Motel ${nombreMostrar}`);
-        const promesas = [];
+        // Enviar una por una con pausa para no saturar la conexión de WhatsApp
         for (let i = 1; i <= cantidad; i++) {
           const rutaFoto = path.join(__dirname, 'fotos', `${motelNombre}_${tipo}_${i}.jpeg`);
           if (fs.existsSync(rutaFoto)) {
-            promesas.push(cliente.sendMessage(chatId, MessageMedia.fromFilePath(rutaFoto)));
+            try {
+              await cliente.sendMessage(chatId, MessageMedia.fromFilePath(rutaFoto));
+              await new Promise(r => setTimeout(r, 800));
+            } catch (err) {
+              console.error(`❌ Error enviando foto ${i} de ${tipo}:`, err.message);
+            }
           }
         }
-        await Promise.all(promesas);
       };
 
       // Enviar texto primero

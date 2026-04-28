@@ -1,0 +1,22 @@
+# ── VARIABLES NUEVAS A AGREGAR EN RAILWAY ──────────────────────
+
+# Admins adicionales (separados por coma, sin espacios)
+ADMINS_EXTRA=56991655665,56999644093
+
+# LID admin (formato @lid de WhatsApp)
+ADMIN_LID=202902928908358
+
+# Email de reclamos
+EMAIL_RECLAMOS=servicioalcliente@motelesapolo.cl
+
+# Capacidad Motel Apolo
+APOLO_CAP_SIMPLE=6
+APOLO_CAP_VIP=3
+APOLO_CAP_JACUZZI=2
+
+# Capacidad Motel Le Chateau
+CHATEAU_CAP_SIMPLE=7
+CHATEAU_CAP_VIP=5
+CHATEAU_CAP_JACUZZI=2
+
+# (MOTEL_TELEFONO ya debería existir en Railway como +56 9 4567 6410)
