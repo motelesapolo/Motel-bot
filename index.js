@@ -14,6 +14,7 @@ let qrActual = null;
 let botConectado = false;
 let botPausado = false;
 let numeroPrueba = null; // Cuando está activo, solo responde a este número
+const pausasPorAdmin = new Map(); // telefono → timestamp de pausa por respuesta admin
 
 app.get('/', (req, res) => {
   if (botConectado) {
@@ -83,7 +84,15 @@ cliente.on('disconnected', (reason) => {
 // ── Mensajes ──────────────────────────────────────────────────
 cliente.on('message', async (mensaje) => {
   if (mensaje.from.includes('@g.us')) return;
-  if (mensaje.fromMe) return;
+  if (mensaje.fromMe) {
+    // Si el admin responde a un cliente, pausar el bot para ese cliente 10 minutos
+    const destinatario = (mensaje.to || '').replace('@c.us', '').replace('@lid', '');
+    if (destinatario && !destinatario.includes('@g.us')) {
+      pausasPorAdmin.set(destinatario, Date.now());
+      console.log(`⏸️ Bot pausado 10min para ${destinatario} — admin respondió`);
+    }
+    return;
+  }
   if (mensaje.from === 'status@broadcast') return;
   // Filtrar newsletters, canales y mensajes de sistema que no tienen estructura normal
   if (mensaje.from.includes('@newsletter')) return;
@@ -105,19 +114,20 @@ cliente.on('message', async (mensaje) => {
   const texto = mensaje.body?.trim();
   if (!texto) return;
 
-  // Si el cliente hace reply a una imagen, transferir a agente
-  // ya que el bot no puede saber qué habitación específica es
+  // Si el cliente hace reply a una imagen preguntando por disponibilidad específica
   if (mensaje.hasQuotedMsg) {
     const quoted = await mensaje.getQuotedMessage().catch(() => null);
-    if (quoted && (quoted.type === 'image' || quoted.fromMe)) {
-      const chatId = mensaje.from;
-      await cliente.sendMessage(chatId, 'Para consultas sobre una habitación específica, un ejecutivo te atenderá en breve 😊 Estamos recibiendo mensajes por orden de llegada.');
-      // Notificar al admin
-      const { notificarAdmin } = require('./ia');
-      if (notificarAdmin) {
-        await notificarAdmin(telefono, texto, 'Cliente preguntó por habitación específica (reply a foto)').catch(() => {});
+    if (quoted && quoted.type === 'image' && quoted.fromMe) {
+      // Solo transferir si pregunta por habitación específica (disponibilidad, número, etc.)
+      const textLower = texto.toLowerCase();
+      const preguntaHab = textLower.includes('disponib') || textLower.includes('esa habitac') || 
+                          textLower.includes('ese cuarto') || textLower.includes('número') ||
+                          textLower.includes('la del') || textLower.includes('esa pieza');
+      if (preguntaHab) {
+        const chatId = mensaje.from;
+        await cliente.sendMessage(chatId, 'Para consultas sobre una habitación específica, un ejecutivo te atenderá en breve 😊 Estamos recibiendo mensajes por orden de llegada.');
+        return;
       }
-      return;
     }
   }
 
@@ -183,6 +193,15 @@ cliente.on('message', async (mensaje) => {
   if (botPausado) {
     console.log(`⏸️ Bot pausado - mensaje de ${telefono} ignorado`);
     return;
+  }
+
+  // Si el admin respondió recientemente a este cliente, pausar 10 minutos
+  const pausaAdmin = pausasPorAdmin.get(telefono);
+  if (pausaAdmin && (Date.now() - pausaAdmin) < 10 * 60 * 1000) {
+    console.log(`⏸️ Bot pausado por respuesta admin — ignorando mensaje de ${telefono}`);
+    return;
+  } else if (pausaAdmin) {
+    pausasPorAdmin.delete(telefono); // Limpiar pausa expirada
   }
 
   const chat = await mensaje.getChat();
