@@ -186,16 +186,8 @@ async function crearReserva({ nombre, telefono, tipo, fechaInicio, motel, precio
 
 // ── Capacidad por motel y tipo ───────────────────────────────
 const CAPACIDAD = {
-  Apolo: {
-    simple:  parseInt(process.env.APOLO_CAP_SIMPLE  || '6'),
-    vip:     parseInt(process.env.APOLO_CAP_VIP     || '3'),
-    jacuzzi: parseInt(process.env.APOLO_CAP_JACUZZI || '2'),
-  },
-  LeChateaU: {
-    simple:  parseInt(process.env.CHATEAU_CAP_SIMPLE  || '7'),
-    vip:     parseInt(process.env.CHATEAU_CAP_VIP     || '5'),
-    jacuzzi: parseInt(process.env.CHATEAU_CAP_JACUZZI || '2'),
-  },
+  Apolo:     { simple: 6, vip: 3, jacuzzi: 2 },
+  LeChateaU: { simple: 7, vip: 5, jacuzzi: 2 },
 };
 
 function getCapacidad(motel, tipoHab) {

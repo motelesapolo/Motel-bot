@@ -68,6 +68,15 @@ cliente.on('auth_failure', (msg) => console.error('❌ Auth failure:', msg));
 cliente.on('disconnected', (reason) => {
   console.log('📵 Desconectado:', reason);
   botConectado = false;
+  if (reason === 'LOGOUT') {
+    console.log('🔄 LOGOUT detectado — limpiando sesión...');
+    const fs = require('fs');
+    const path = require('path');
+    try {
+      fs.rmSync(path.join(__dirname, 'session'), { recursive: true, force: true });
+      console.log('🗑️ Sesión eliminada');
+    } catch (e) { console.error('Error eliminando sesión:', e.message); }
+  }
   setTimeout(() => cliente.initialize(), 10000);
 });
 
@@ -90,15 +99,33 @@ cliente.on('message', async (mensaje) => {
     return;
   }
 
+  // Ignorar mensajes que son solo imagen/video/sticker sin texto
+  if ((mensaje.type === 'image' || mensaje.type === 'video' || mensaje.type === 'sticker') && !mensaje.body?.trim()) return;
+
   const texto = mensaje.body?.trim();
   if (!texto) return;
+
+  // Si el cliente hace reply a una imagen, transferir a agente
+  // ya que el bot no puede saber qué habitación específica es
+  if (mensaje.hasQuotedMsg) {
+    const quoted = await mensaje.getQuotedMessage().catch(() => null);
+    if (quoted && (quoted.type === 'image' || quoted.fromMe)) {
+      const chatId = mensaje.from;
+      await cliente.sendMessage(chatId, 'Para consultas sobre una habitación específica, un ejecutivo te atenderá en breve 😊 Estamos recibiendo mensajes por orden de llegada.');
+      // Notificar al admin
+      const { notificarAdmin } = require('./ia');
+      if (notificarAdmin) {
+        await notificarAdmin(telefono, texto, 'Cliente preguntó por habitación específica (reply a foto)').catch(() => {});
+      }
+      return;
+    }
+  }
 
   console.log(`📩 [${new Date().toLocaleTimeString('es-CL')}] De ${telefono}: ${texto}`);
 
   // Algunos números llegan con formato @lid - mapear al número real
-  const LID_ADMINS = (process.env.ADMIN_LID || '202902928908358').split(',');
-  const ADMINS_EXTRA = process.env.ADMINS_EXTRA ? process.env.ADMINS_EXTRA.split(',') : ['56991655665', '56999644093'];
-  const ADMINS = [process.env.ADMIN_NUMERO, ...ADMINS_EXTRA, ...LID_ADMINS].filter(Boolean);
+  const LID_ADMINS = ['202902928908358']; // @lid del +56991655665
+  const ADMINS = [process.env.ADMIN_NUMERO, '56991655665', '56999644093', ...LID_ADMINS].filter(Boolean);
 
   // ── Comandos Admin ────────────────────────────────────────
   if (ADMINS.includes(telefono)) {
@@ -188,7 +215,6 @@ cliente.on('message', async (mensaje) => {
       const enviarTipoFotos = async (tipo, cantidad) => {
         const nombreTipo = tipo.charAt(0).toUpperCase() + tipo.slice(1);
         await cliente.sendMessage(chatId, `🛏️ ${nombreTipo} - Motel ${nombreMostrar}`);
-        // Enviar una por una con pausa para no saturar la conexión de WhatsApp
         for (let i = 1; i <= cantidad; i++) {
           const rutaFoto = path.join(__dirname, 'fotos', `${motelNombre}_${tipo}_${i}.jpeg`);
           if (fs.existsSync(rutaFoto)) {
@@ -196,7 +222,7 @@ cliente.on('message', async (mensaje) => {
               await cliente.sendMessage(chatId, MessageMedia.fromFilePath(rutaFoto));
               await new Promise(r => setTimeout(r, 800));
             } catch (err) {
-              console.error(`❌ Error enviando foto ${i} de ${tipo}:`, err.message);
+              console.error(`❌ Error foto ${i} de ${tipo}:`, err.message);
             }
           }
         }
