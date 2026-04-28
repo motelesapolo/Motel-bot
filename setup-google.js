@@ -12,7 +12,7 @@ const oAuth2Client = new google.auth.OAuth2(
   'urn:ietf:wg:oauth:2.0:oob' // Para obtener código manualmente
 );
 
-const SCOPES = ['https://www.googleapis.com/auth/calendar'];
+const SCOPES = ['https://www.googleapis.com/auth/calendar', 'https://www.googleapis.com/auth/spreadsheets'];
 
 const authUrl = oAuth2Client.generateAuthUrl({
   access_type: 'offline',

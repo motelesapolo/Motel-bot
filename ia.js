@@ -527,7 +527,7 @@ async function notificarAdmin(telefono, mensaje, motivo) {
 }
 
 // ── Notificar al celular de la empresa cuando se crea reserva ─
-const EMPRESA_NUMERO = '${process.env.MOTEL_TELEFONO}';
+const EMPRESA_NUMERO = (process.env.EMPRESA_NUMERO || process.env.ADMIN_NUMERO || '').replace('+', '').replace(/\s/g, '');
 
 async function notificarEmpresa(datos, result, tipo, precio, duracionHoras, telefono) {
   if (!clienteWhatsApp) return;
@@ -764,7 +764,10 @@ async function procesarMensaje(telefono, mensajeUsuario, numeroPrueba = null) {
     // Verificar si hay acciones
     let fotosParaEnviar = null;
     if (textoRespuesta.includes('[ACCION:')) {
+      console.log(`🔧 IA ejecutando acción para ${telefono}`);
+      console.log(`🔧 Acciones detectadas:`, textoRespuesta.match(/\[ACCION:(\w+)\]/g));
       const resultados = await ejecutarAccionesIA(textoRespuesta, telefono);
+      console.log(`🔧 Resultado acciones:`, resultados.substring(0, 200));
       // Capturar fotos si hay
       fotosParaEnviar = extraerFotos(resultados);
       const respuestaFinal = await anthropic.messages.create({
@@ -787,6 +790,9 @@ async function procesarMensaje(telefono, mensajeUsuario, numeroPrueba = null) {
     }
 
     const respuestaLimpia = limpiarRespuesta(textoRespuesta);
+    if (!textoRespuesta.includes('[ACCION:')) {
+      console.log(`💬 IA respondió SIN ejecutar acciones para ${telefono}`);
+    }
     historial.push({ role: 'assistant', content: respuestaLimpia });
     conversaciones.set(telefono, historial.slice(-40));
 
