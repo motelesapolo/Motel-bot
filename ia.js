@@ -309,10 +309,12 @@ CAPACIDAD DE HABITACIONES:
 - Si tampoco hay disponibilidad en el otro motel, decir: "Lo sentimos, no tenemos disponibilidad para ese horario. Te invitamos a llamarnos directamente al ${process.env.MOTEL_TELEFONO} (Apolo anexo 710 / Le Chateau anexo 210) para revisar opciones o hablar con un agente."
 
 HORARIOS DE ESTADÍA:
-- VALOR NOCHE: entrada 22:00, 23:00 o 00:00 → salida siempre 12:00. Crear reserva directamente.
-- VALOR NOCHE desde las 01:00 hasta las 12:00: sugerir 12 horas porque le conviene más al pasajero (tendrá más tiempo). Si el pasajero insiste en noche, crearlo igual sin poner problemas. Salida siempre a las 12:00.
-- VALOR NOCHE entre 13:00 y 21:59: informar que el horario de noche parte a las 22:00. Ofrecer la alternativa más conveniente según la hora (ej: si son las 15:00 ofrecer 3h o 6x3, si son las 19:00 ofrecer 3h o esperar a las 22:00). Si insiste en noche, crear igual con salida 12:00.
-- NUNCA rechazar una reserva por la hora. Solo sugerir lo más conveniente para el pasajero.
+- VALOR NOCHE (22:00 a 12:00): crear reserva directamente. Salida siempre a las 12:00.
+- VALOR NOCHE desde 21:30 hasta 21:59: aceptar y crear directamente. Salida a las 12:00.
+- VALOR NOCHE desde 21:00 hasta 21:29: el sistema devolverá NOCHE_SUGERIR_EXTRAS. Responder solo si el cliente pregunta: "Puedes llegar a las 21:00 con 1 hora extra y comenzar la noche a las 22:00 😊" Solo mencionarlo si el cliente lo pregunta.
+- VALOR NOCHE desde 20:00 hasta 20:59: el sistema devolverá NOCHE_SUGERIR_EXTRAS. Responder solo si el cliente pregunta: "Puedes llegar a las 20:00 con 2 horas extras y comenzar la noche a las 22:00 😊" Solo mencionarlo si el cliente lo pregunta.
+- VALOR NOCHE entre 13:00 y 19:59: el sistema devolverá NOCHE_HORA_INVALIDA. Responder: "El horario de noche parte a las 22:00. ¿Te acomoda llegar a esa hora o prefieres 3h, la promo 6x3 o 12 horas?"
+- VALOR NOCHE desde 01:00 hasta 12:00: sugerir 12 horas porque le conviene más. Si insiste en noche, crear igual.
 - 12 HORAS: 12 horas corridas desde cualquier hora. Solo mencionar si el cliente pregunta.
 - 3 HORAS y 6x3: cualquier hora, sin cambios.
 - 24 HORAS: cualquier hora, sin cambios.
@@ -581,6 +583,26 @@ async function procesarAccion(accion, datos, telefono) {
         console.log(`⚠️ Fecha sin hora corregida a: ${fechaInicio}`);
       }
       datos = { ...datos, fechaInicio };
+
+      // Validar hora para noche
+      const _fechaCheck = parsearFechaSantiago(datos.fechaInicio);
+      const _localCheck = new Date(_fechaCheck.toLocaleString('en-US', { timeZone: 'America/Santiago' }));
+      const _horaCheck = _localCheck.getHours();
+      const _minCheck = _localCheck.getMinutes();
+      const _minTotalCheck = _horaCheck * 60 + _minCheck;
+      if ((datos.tipo || '').toLowerCase().includes('_noche')) {
+        // 21:30 en adelante → aceptar
+        // 20:00 a 21:29 → sugerir horas extras
+        // 13:00 a 19:59 → informar que noche parte a las 22:00
+        if (_minTotalCheck >= 13*60 && _minTotalCheck < 20*60) {
+          return `RESULTADO_RESERVA: {"ok": false, "error": "NOCHE_HORA_INVALIDA", "hora": ${_horaCheck}}`;
+        }
+        if (_minTotalCheck >= 20*60 && _minTotalCheck < 21*60 + 30) {
+          const extrasRecomendadas = _minTotalCheck < 21*60 ? 2 : 1;
+          return `RESULTADO_RESERVA: {"ok": false, "error": "NOCHE_SUGERIR_EXTRAS", "hora": ${_horaCheck}, "minutos": ${_minCheck}, "extrasRecomendadas": ${extrasRecomendadas}}`;
+        }
+        // 21:30 en adelante y 00:00-12:00 → aceptar noche
+      }
 
       // Corregir tipo automáticamente según fecha real Santiago
       // Fix zona horaria cruce medianoche: convertir siempre a hora local Santiago
