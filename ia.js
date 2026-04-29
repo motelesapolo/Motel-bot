@@ -8,6 +8,7 @@ const {
   consultarDisponibilidad,
   cancelarReserva,
   parsearFechaSantiago,
+  cargarReservasDesdeSheets,
 } = require('./reservas');
 require('dotenv').config();
 
@@ -25,6 +26,13 @@ const ADMIN_NUMERO = process.env.ADMIN_NUMERO || '';
 
 function setClienteWhatsApp(cliente) {
   clienteWhatsApp = cliente;
+  // Cargar reservas recientes desde Sheets al iniciar
+  cargarReservasDesdeSheets().then(mapa => {
+    for (const [id, datos] of mapa) {
+      reservasConfirmadas.set(id, datos);
+    }
+    console.log(`✅ ${reservasConfirmadas.size} reservas cargadas desde Sheets`);
+  }).catch(err => console.error('Error cargando reservas:', err.message));
 }
 
 // ── Detectar saludo según hora ────────────────────────────────
@@ -368,13 +376,18 @@ TIEMPO DE ESPERA DE RESERVA: La reserva se espera durante 30 minutos desde la ho
 
 PROPINA: Al confirmar una reserva, recordar al cliente que la propina es voluntaria. Ejemplo: "Recuerda que la propina para nuestro personal es completamente voluntaria 😊" Pasado ese tiempo, la habitación puede quedar disponible para otro cliente.
 
-MODIFICACIÓN DE RESERVAS: Si el cliente ya tiene una reserva activa y quiere cambiar algo (fecha, hora, tipo de habitación, motel), debes:
+MODIFICACIÓN Y CANCELACIÓN DE RESERVAS:
+- Nuestras reservas tienen un código de 6 dígitos NUMÉRICOS (ej: 659568)
+- SIEMPRE pedir el número de reserva primero antes de hacer cualquier cambio o cancelación
+- Si el cliente no tiene el número, decirle que lo busque en el mensaje de confirmación que le enviamos
+- Si el código tiene letras y números (ej: AB1234, MN-456X) → es de MotelNow. Decirle: "Esa reserva fue hecha por MotelNow, debes modificarla o cancelarla directamente con ellos."
+- Si el código es de 6 dígitos numéricos → es nuestra, proceder:
 1. Confirmar qué quiere cambiar
 2. Recopilar los nuevos datos
 3. Usar accion "crear_reserva" con los campos "esModificacion": true y "reservaIdAnterior": "NÚMERO_RESERVA"
    Ejemplo: {"nombre": "Juan", "fechaInicio": "...", "tipo": "...", "motel": "...", "esModificacion": true, "reservaIdAnterior": "123456"}
 4. El sistema borrará la reserva anterior de Google Calendar y mantendrá el MISMO número de reserva
-4. Informar al cliente el nuevo número de reserva
+- Si el cliente tiene más de una reserva, preguntarle el número de la reserva que desea modificar o cancelar
 
 LLEGADA TARDE: Si un cliente dice que llegará más tarde de la hora reservada:
 1. Modificar la reserva con la nueva hora (usar esModificacion: true)
