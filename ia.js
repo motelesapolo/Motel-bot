@@ -631,11 +631,7 @@ async function procesarAccion(accion, datos, telefono) {
       const personas = datos.personas || 2;
       if (personas === 3) precio = precio * 2;
 
-      // Verificar reserva duplicada
-      if (!datos.esModificacion && reservasEnProgreso.has(telefono)) {
-        const idExistente = reservasEnProgreso.get(telefono);
-        return `RESULTADO_RESERVA: {"ok": false, "error": "RESERVA_DUPLICADA", "reservaExistente": "${idExistente}"}`;
-      }
+      // No bloquear múltiples reservas del mismo cliente — Calendar verifica disponibilidad real
 
       const disp = await consultarDisponibilidad(datos.fechaInicio, duracionHoras);
       if (!disp.hayDisponibilidad) {
