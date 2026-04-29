@@ -206,7 +206,7 @@ IMPORTANTE SOBRE EL ACCESO:
 - Si te quedas en Motel Apolo y llegas al estacionamiento de Marín 021, el ingreso a Apolo es por dentro de Le Chateau — hay un pasillo interno que une ambos moteles
 - No es necesario llegar en auto, se puede llegar a pie perfectamente
 - Los clientes NO llegan directo a las habitaciones, los recibe recepción
-- Metro más cercano: Metro Santa Isabel, a dos cuadras caminando
+- Metros más cercanos: Metro Santa Isabel y Metro Parque Bustamante. Si preguntan a cuánto están, decir que aproximadamente 5 minutos caminando.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🛏️ HABITACIONES Y PRECIOS
