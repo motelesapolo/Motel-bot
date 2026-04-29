@@ -467,7 +467,7 @@ ${!esSinAgente() ?
 [/ACCION]
 
 TIPOS VÁLIDOS:
-- simple_3h_semana | simple_6x3_semana | simple_noche_semana | simple_24h
+- simple_3h_semana | simple_6x3_semana | simple_noche_semana | simple_12h_semana | simple_24h
 - simple_3h_finde  | simple_6x3_finde  | simple_noche_finde
 - vip_3h_semana    | vip_6x3_semana    | vip_noche_semana    | vip_24h
 - vip_3h_finde     | vip_6x3_finde     | vip_noche_finde
@@ -488,24 +488,27 @@ REGLAS:
 
 // ── Tabla de precios y duraciones ────────────────────────────
 const PRECIOS = {
-  simple_3h_semana: 27000, simple_6x3_semana: 27000, simple_noche_semana: 35000, simple_24h: 55000,
-  simple_3h_finde:  29000, simple_6x3_finde:  29000, simple_noche_finde:  39000,
-  vip_3h_semana:    32000, vip_6x3_semana:    32000, vip_noche_semana:    42000, vip_24h: 65000,
-  vip_3h_finde:     37000, vip_6x3_finde:     37000, vip_noche_finde:     46000,
-  jacuzzi_3h_semana: 40000, jacuzzi_6x3_semana: 40000, jacuzzi_noche_semana: 51000, jacuzzi_24h: 75000,
-  jacuzzi_3h_finde:  44000, jacuzzi_6x3_finde:  44000, jacuzzi_noche_finde:  53000,
+  simple_3h_semana: 27000, simple_6x3_semana: 27000, simple_noche_semana: 35000, simple_12h_semana: 35000, simple_24h: 55000,
+  simple_3h_finde:  29000, simple_6x3_finde:  29000, simple_noche_finde:  39000, simple_12h_finde: 39000,
+  vip_3h_semana:    32000, vip_6x3_semana:    32000, vip_noche_semana:    42000, vip_12h_semana: 42000, vip_24h: 65000,
+  vip_3h_finde:     37000, vip_6x3_finde:     37000, vip_noche_finde:     46000, vip_12h_finde: 46000,
+  jacuzzi_3h_semana: 40000, jacuzzi_6x3_semana: 40000, jacuzzi_noche_semana: 51000, jacuzzi_12h_semana: 51000, jacuzzi_24h: 75000,
+  jacuzzi_3h_finde:  44000, jacuzzi_6x3_finde:  44000, jacuzzi_noche_finde:  53000, jacuzzi_12h_finde: 53000,
 };
 
 const DURACIONES = {
   simple_3h_semana: 3,  simple_3h_finde: 3,
   simple_6x3_semana: 6, simple_6x3_finde: 6,
   simple_noche_semana: 12, simple_noche_finde: 12, simple_24h: 24,
+  simple_12h_semana: 12, simple_12h_finde: 12,
   vip_3h_semana: 3, vip_3h_finde: 3,
   vip_6x3_semana: 6, vip_6x3_finde: 6,
   vip_noche_semana: 12, vip_noche_finde: 12, vip_24h: 24,
+  vip_12h_semana: 12, vip_12h_finde: 12,
   jacuzzi_3h_semana: 3, jacuzzi_3h_finde: 3,
   jacuzzi_6x3_semana: 6, jacuzzi_6x3_finde: 6,
   jacuzzi_noche_semana: 12, jacuzzi_noche_finde: 12, jacuzzi_24h: 24,
+  jacuzzi_12h_semana: 12, jacuzzi_12h_finde: 12,
 };
 
 // ── Notificar al admin ────────────────────────────────────────
