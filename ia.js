@@ -423,11 +423,13 @@ CARTA DE PRECIOS:
 - NUNCA envíes este enlace para fotos de habitaciones — para eso existe la acción enviar_fotos.
 
 FOTOS DE HABITACIONES:
-- Si pide fotos de un tipo específico: usa enviar_fotos con motel y tipo
+- Si pide fotos de un tipo específico de UN motel: usa enviar_fotos con motel y tipo
 - Si pide fotos de TODAS las habitaciones de un motel: usa enviar_fotos con tipo "todas"
+- Si pide fotos de LOS DOS MOTELES: ejecuta enviar_fotos DOS VECES, una para "apolo" y otra para "lechateau"
 - Si no especifica motel, pregunta primero cuál motel
 - Valores válidos: motel: "apolo" o "lechateau" | tipo: "simple", "vip", "jacuzzi" o "todas"
-- Ejemplo: [ACCION:enviar_fotos]{"motel": "apolo", "tipo": "vip"}[/ACCION]
+- Ejemplo un motel: [ACCION:enviar_fotos]{"motel": "apolo", "tipo": "vip"}[/ACCION]
+- Ejemplo dos moteles: [ACCION:enviar_fotos]{"motel": "apolo", "tipo": "jacuzzi"}[/ACCION][ACCION:enviar_fotos]{"motel": "lechateau", "tipo": "jacuzzi"}[/ACCION]
 - Después de las fotos pregunta brevemente si desea reservar
 
 RECLAMOS: ${process.env.EMAIL_RECLAMOS || 'servicioalcliente@motelesapolo.cl'} (lunes a viernes 9:00 a 17:00 hrs)
