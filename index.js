@@ -100,7 +100,10 @@ cliente.on('message', async (mensaje) => {
   if (!mensaje.from || !mensaje.body === undefined) return;
 
   const rawFrom = mensaje.from || '';
-  const telefono = rawFrom.replace('@c.us', '').replace('@lid', '');
+  let telefono = rawFrom.replace('@c.us', '').replace('@lid', '');
+  // Mapear LID al número real de WhatsApp
+  const LID_MAP = { '202902928908358': '56991655665' };
+  if (LID_MAP[telefono]) telefono = LID_MAP[telefono];
   // Detectar mensaje de voz (ptt = push-to-talk) o audio
   if (mensaje.type === 'ptt' || mensaje.type === 'audio') {
     console.log(`🎤 Mensaje de voz de ${telefono} - respondiendo automáticamente`);
