@@ -101,17 +101,12 @@ cliente.on('message', async (mensaje) => {
 
   const rawFrom = mensaje.from || '';
   let telefono = rawFrom.replace('@c.us', '').replace('@lid', '');
-  // Ignorar mensajes del número del motel (evitar que el bot se responda a sí mismo)
+  // Ignorar mensajes del número del motel
   const NUMERO_MOTEL = (process.env.EMPRESA_NUMERO || '56945676410');
   if (telefono === NUMERO_MOTEL) return;
-  // Si el número es un LID (más de 12 dígitos y no empieza con 56), usar ADMIN_NUMERO
+  // Mapear LIDs conocidos al número real
   const LID_MAP = { '202902928908358': '56991655665', '217274023702535': process.env.ADMIN_NUMERO || '56949716039' };
-  if (LID_MAP[telefono]) {
-    telefono = LID_MAP[telefono];
-  } else if (telefono.length > 12 && !telefono.startsWith('56')) {
-    // LID desconocido — usar como identificador pero loguear
-    console.log(`⚠️ LID desconocido: ${telefono} — usando como ID`);
-  }
+  if (LID_MAP[telefono]) telefono = LID_MAP[telefono];
   // Detectar mensaje de voz (ptt = push-to-talk) o audio
   if (mensaje.type === 'ptt' || mensaje.type === 'audio') {
     console.log(`🎤 Mensaje de voz de ${telefono} - respondiendo automáticamente`);
@@ -239,14 +234,14 @@ cliente.on('message', async (mensaje) => {
       const path = require('path');
       const fs = require('fs');
 
-      const motelNombre = fotos.motel === 'lechateau' ? 'chateau' : fotos.motel;
-      const nombreMostrar = fotos.motel === 'lechateau' ? 'Le Chateau' : 'Apolo';
-
-      const enviarTipoFotos = async (tipo, cantidad) => {
+      // Función para enviar fotos de un tipo/motel específico
+      const enviarTipoFotos = async (motelId, tipo, cantidad) => {
+        const motelArch = motelId === 'lechateau' ? 'chateau' : motelId;
+        const motelLabel = motelId === 'lechateau' ? 'Le Chateau' : 'Apolo';
         const nombreTipo = tipo.charAt(0).toUpperCase() + tipo.slice(1);
-        await cliente.sendMessage(chatId, `🛏️ ${nombreTipo} - Motel ${nombreMostrar}`);
+        await cliente.sendMessage(chatId, `🛏️ ${nombreTipo} - Motel ${motelLabel}`);
         for (let i = 1; i <= cantidad; i++) {
-          const rutaFoto = path.join(__dirname, 'fotos', `${motelNombre}_${tipo}_${i}.jpeg`);
+          const rutaFoto = path.join(__dirname, 'fotos', `${motelArch}_${tipo}_${i}.jpeg`);
           if (fs.existsSync(rutaFoto)) {
             try {
               await cliente.sendMessage(chatId, MessageMedia.fromFilePath(rutaFoto));
@@ -258,56 +253,50 @@ cliente.on('message', async (mensaje) => {
         }
       };
 
+      // Función para procesar un bloque de fotos
+      const procesarBloqueForotos = async (bloque) => {
+        const motelId = bloque.motel || 'apolo';
+        if (bloque.ambos) {
+          for (const mId of ['apolo', 'lechateau']) {
+            const datosMotel = bloque[mId];
+            if (datosMotel.todas && datosMotel.tipos) {
+              for (const { tipo, cantidad } of datosMotel.tipos) {
+                await enviarTipoFotos(mId, tipo, cantidad);
+                await new Promise(r => setTimeout(r, 1000));
+              }
+            } else {
+              await enviarTipoFotos(mId, datosMotel.tipo, datosMotel.cantidad);
+            }
+            await new Promise(r => setTimeout(r, 1500));
+          }
+        } else if (bloque.todas && bloque.tipos) {
+          for (const { tipo, cantidad } of bloque.tipos) {
+            await enviarTipoFotos(motelId, tipo, cantidad);
+            await new Promise(r => setTimeout(r, 1000));
+          }
+        } else {
+          await enviarTipoFotos(motelId, bloque.tipo, bloque.cantidad);
+        }
+      };
+
       // Enviar texto primero
       if (textoRespuesta) await cliente.sendMessage(chatId, textoRespuesta);
 
-      if (fotos.ambos) {
-        // Enviar fotos de AMBOS moteles
-        for (const motelId of ['apolo', 'lechateau']) {
-          const motelNombreLocal = motelId === 'lechateau' ? 'chateau' : motelId;
-          const motelMostrar = motelId === 'lechateau' ? 'Le Chateau' : 'Apolo';
-          const datosMotel = fotos[motelId];
-
-          // Función local para este motel
-          const enviarTipoFotosLocal = async (tipo, cantidad) => {
-            const nombreTipo = tipo.charAt(0).toUpperCase() + tipo.slice(1);
-            await cliente.sendMessage(chatId, `🛏️ ${nombreTipo} - Motel ${motelMostrar}`);
-            for (let i = 1; i <= cantidad; i++) {
-              const rutaFoto = path.join(__dirname, 'fotos', `${motelNombreLocal}_${tipo}_${i}.jpeg`);
-              if (fs.existsSync(rutaFoto)) {
-                try {
-                  await cliente.sendMessage(chatId, MessageMedia.fromFilePath(rutaFoto));
-                  await new Promise(r => setTimeout(r, 800));
-                } catch (err) {
-                  console.error(`❌ Error foto ${i} de ${tipo}:`, err.message);
-                }
-              }
-            }
-          };
-
-          if (datosMotel.todas && datosMotel.tipos) {
-            for (const { tipo, cantidad } of datosMotel.tipos) {
-              await enviarTipoFotosLocal(tipo, cantidad);
-              await new Promise(r => setTimeout(r, 1000));
-            }
-          } else {
-            await enviarTipoFotosLocal(datosMotel.tipo, datosMotel.cantidad);
-          }
-          await new Promise(r => setTimeout(r, 1500)); // Pausa entre moteles
+      // Procesar fotos — simple, múltiples o ambos moteles
+      if (fotos.multiple && fotos.lista) {
+        // Múltiples grupos de fotos (ej: simple + vip)
+        for (const bloque of fotos.lista) {
+          await procesarBloqueForotos(bloque);
+          await new Promise(r => setTimeout(r, 800));
         }
-        console.log(`📸 Fotos de ambos moteles enviadas a ${telefono}`);
-      } else if (fotos.todas && fotos.tipos) {
-        // Enviar todas las habitaciones de un motel
-        for (const { tipo, cantidad } of fotos.tipos) {
-          await enviarTipoFotos(tipo, cantidad);
-          await new Promise(r => setTimeout(r, 1000));
-        }
-        console.log(`📸 Todas las fotos enviadas a ${telefono}: ${motelNombre}`);
+        console.log(`📸 Múltiples grupos de fotos enviados a ${telefono}`);
       } else {
-        // Enviar un solo tipo de un motel
-        await enviarTipoFotos(fotos.tipo, fotos.cantidad);
-        console.log(`📸 Fotos enviadas a ${telefono}: ${motelNombre} ${fotos.tipo}`);
+        await procesarBloqueForotos(fotos);
+        console.log(`📸 Fotos enviadas a ${telefono}`);
       }
+
+      await chat.clearState();
+      return;
     } else {
       await cliente.sendMessage(chatId, respuesta);
       console.log(`📤 Respuesta enviada a ${telefono}`);

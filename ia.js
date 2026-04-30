@@ -768,13 +768,20 @@ function limpiarRespuesta(texto) {
 }
 
 function extraerFotos(resultados) {
-  // Extrae info de fotos del resultado de acciones si existe
-  const match = resultados.match(/RESULTADO_FOTOS: (\{.*?\})/);
-  if (!match) return null;
-  try {
-    const data = JSON.parse(match[1]);
-    return data.ok ? data : null;
-  } catch { return null; }
+  // Extrae TODAS las acciones de fotos del resultado
+  const regex = /RESULTADO_FOTOS: (\{.*?\})/g;
+  let match;
+  const todasFotos = [];
+  while ((match = regex.exec(resultados)) !== null) {
+    try {
+      const data = JSON.parse(match[1]);
+      if (data.ok) todasFotos.push(data);
+    } catch { }
+  }
+  if (todasFotos.length === 0) return null;
+  if (todasFotos.length === 1) return todasFotos[0];
+  // Múltiples acciones de fotos — retornar como lista
+  return { ok: true, multiple: true, lista: todasFotos };
 }
 
 // ── Función principal ─────────────────────────────────────────
