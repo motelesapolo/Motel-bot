@@ -768,19 +768,34 @@ function limpiarRespuesta(texto) {
 }
 
 function extraerFotos(resultados) {
-  // Extrae TODAS las acciones de fotos del resultado
-  const regex = /RESULTADO_FOTOS: (\{.*?\})/g;
-  let match;
-  const todasFotos = [];
-  while ((match = regex.exec(resultados)) !== null) {
-    try {
-      const data = JSON.parse(match[1]);
-      if (data.ok) todasFotos.push(data);
-    } catch { }
+  // Parser que cuenta llaves para manejar JSON anidado
+  function extraerJSON(texto, desde) {
+    let depth = 0, i = desde;
+    while (i < texto.length) {
+      if (texto[i] === '{') depth++;
+      else if (texto[i] === '}') { depth--; if (depth === 0) return texto.slice(desde, i + 1); }
+      i++;
+    }
+    return null;
   }
+
+  const todasFotos = [];
+  let pos = 0;
+  while (true) {
+    const idx = resultados.indexOf('RESULTADO_FOTOS: {', pos);
+    if (idx === -1) break;
+    const jsonStr = extraerJSON(resultados, idx + 'RESULTADO_FOTOS: '.length);
+    if (jsonStr) {
+      try {
+        const data = JSON.parse(jsonStr);
+        if (data.ok) todasFotos.push(data);
+      } catch { }
+    }
+    pos = idx + 1;
+  }
+
   if (todasFotos.length === 0) return null;
   if (todasFotos.length === 1) return todasFotos[0];
-  // Múltiples acciones de fotos — retornar como lista
   return { ok: true, multiple: true, lista: todasFotos };
 }
 
