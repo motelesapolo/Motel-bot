@@ -27,7 +27,7 @@ async function guardarEnSheets(datos) {
       new Date().toLocaleString('es-CL', { timeZone: 'America/Santiago' }),
       datos.reservaId || '',
       datos.nombre || '',
-      datos.telefono || '',
+      (datos.telefono || '').replace('+', '') || '',
       datos.motel || '',
       datos.tipo || '',
       datos.fechaInicio || '',
@@ -35,6 +35,7 @@ async function guardarEnSheets(datos) {
       datos.precio ? `$${datos.precio.toLocaleString('es-CL')}` : '',
       datos.estado || 'confirmada',
       datos.fallback ? 'RESPALDO (Calendar falló)' : 'OK',
+      datos.googleEventId || '',
     ];
     await sheets.spreadsheets.values.append({
       spreadsheetId: SHEET_ID,
@@ -169,7 +170,7 @@ async function crearReserva({ nombre, telefono, tipo, fechaInicio, motel, precio
     });
 
     // Guardar en Sheets como respaldo
-    await guardarEnSheets({ reservaId, nombre, telefono, motel, tipo, fechaInicio, duracionHoras, precio: precioFinal, estado: 'confirmada', fallback: false });
+    await guardarEnSheets({ reservaId, nombre, telefono, motel, tipo, fechaInicio, duracionHoras, precio: precioFinal, estado: 'confirmada', fallback: false, googleEventId: res.data.id });
     return { ok: true, id: reservaId, googleEventId: res.data.id, precio: precioFinal, inicio, fin };
   } catch (err) {
     console.error('Error creando reserva en Google Calendar:', err.message);
@@ -246,7 +247,6 @@ async function consultarDisponibilidad(fechaInicio, duracionHoras = 3, motel = '
 
 // ── Cancelar reserva ──────────────────────────────────────────
 async function cancelarReserva(reservaId) {
-  // Buscar en memoria el googleEventId
   const reserva = reservasEnMemoria.get(reservaId);
   const googleId = reserva?.googleEventId;
 
@@ -259,6 +259,32 @@ async function cancelarReserva(reservaId) {
       });
     }
     reservasEnMemoria.delete(reservaId);
+
+    // Actualizar estado en Sheets
+    const SHEET_ID = process.env.GOOGLE_SHEET_ID;
+    if (SHEET_ID) {
+      try {
+        const sheets = getSheetsClient();
+        const res = await sheets.spreadsheets.values.get({
+          spreadsheetId: SHEET_ID,
+          range: 'Reservas!A:B',
+        });
+        const filas = res.data.values || [];
+        const fila = filas.findIndex(f => f[1] === reservaId);
+        if (fila > 0) {
+          await sheets.spreadsheets.values.update({
+            spreadsheetId: SHEET_ID,
+            range: `Reservas!J${fila + 1}`,
+            valueInputOption: 'RAW',
+            resource: { values: [['cancelada']] },
+          });
+          console.log(`📊 Reserva ${reservaId} marcada como cancelada en Sheets`);
+        }
+      } catch (err) {
+        console.error('Error actualizando Sheets:', err.message);
+      }
+    }
+
     return { ok: true };
   } catch (err) {
     console.error('Error cancelando reserva:', err.message);
@@ -293,6 +319,35 @@ function formatearFecha(fecha) {
   });
 }
 
+// ── Cargar reservas recientes desde Sheets al iniciar ────────
+async function cargarReservasDesdeSheets() {
+  const SHEET_ID = process.env.GOOGLE_SHEET_ID;
+  if (!SHEET_ID) return new Map();
+  try {
+    const sheets = getSheetsClient();
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: 'Reservas!A:L',
+    });
+    const filas = res.data.values || [];
+    const mapa = new Map();
+    // Tomar las últimas 100 reservas (columnas: fecha,id,nombre,tel,motel,tipo,fechaInicio,horas,precio,estado,fallback,googleEventId)
+    const recientes = filas.slice(-100);
+    for (const fila of recientes) {
+      const reservaId = fila[1];
+      const googleEventId = fila[11];
+      if (reservaId && googleEventId) {
+        mapa.set(reservaId, { id: reservaId, googleEventId });
+      }
+    }
+    console.log(`📋 ${mapa.size} reservas cargadas desde Sheets`);
+    return mapa;
+  } catch (err) {
+    console.error('Error cargando reservas desde Sheets:', err.message);
+    return new Map();
+  }
+}
+
 module.exports = {
   crearReserva,
   consultarDisponibilidad,
@@ -300,4 +355,5 @@ module.exports = {
   obtenerReservasProximas,
   formatearFecha,
   parsearFechaSantiago,
+  cargarReservasDesdeSheets,
 };

@@ -669,7 +669,7 @@ async function procesarAccion(accion, datos, telefono) {
       const tipoLabel = tipo.replace(/_/g, ' ').replace('semana','(semana)').replace('finde','(fin de semana)');
       const result = await crearReserva({
         nombre: datos.nombre,
-        telefono: datos.telefono || telefono,
+        telefono: telefono, // Siempre usar el teléfono real de WhatsApp
         tipo: tipoLabel,
         fechaInicio: datos.fechaInicio,
         motel: datos.motel || 'Apolo',
