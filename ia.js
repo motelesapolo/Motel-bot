@@ -499,6 +499,7 @@ REGLAS:
 - El sistema calcula automáticamente la tarifa correcta (semana o finde) según la fecha y hora exacta
 - No expliques al cliente los detalles de cuándo cambia la tarifa, solo indica el precio correcto
 - SIEMPRE manda la fecha completa con hora en fechaInicio (ej: "2026-04-20T23:00:00"), NUNCA solo la fecha sin hora
+- NUNCA confirmes una reserva ni entregues un número de reserva sin antes ejecutar [ACCION:crear_reserva]. El número lo entrega el sistema en RESULTADO_RESERVA, no lo inventes.
 - No hay restricción de horario general — se puede reservar a cualquier hora
 
 - Si no hay disponibilidad, ofrece el otro motel o un horario alternativo`;
