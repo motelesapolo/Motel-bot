@@ -425,7 +425,7 @@ CARTA DE PRECIOS:
 FOTOS DE HABITACIONES:
 - Si pide fotos de un tipo específico de UN motel: usa enviar_fotos con motel y tipo
 - Si pide fotos de TODAS las habitaciones de un motel: usa enviar_fotos con tipo "todas"
-- Si pide fotos de LOS DOS MOTELES: ejecuta enviar_fotos DOS VECES, una para "apolo" y otra para "lechateau"
+- Si pide fotos de LOS DOS MOTELES: usa enviar_fotos con motel "ambos" y el tipo que pidió
 - Si no especifica motel, pregunta primero cuál motel
 - Valores válidos: motel: "apolo" o "lechateau" | tipo: "simple", "vip", "jacuzzi" o "todas"
 - Ejemplo un motel: [ACCION:enviar_fotos]{"motel": "apolo", "tipo": "vip"}[/ACCION]
@@ -701,13 +701,32 @@ Datos: ${datos.motel} | ${tipoLabel} | ${datos.fechaInicio} | $${precio.toLocale
       return `RESULTADO_CANCELACION: ${JSON.stringify(result)}`;
     }
     case 'enviar_fotos': {
-      const motel = (datos.motel || '').toLowerCase().includes('chateau') ? 'lechateau' : 'apolo';
+      const motelRaw = (datos.motel || '').toLowerCase();
       const tipo = (datos.tipo || '').toLowerCase();
       const cantidades = {
         apolo:     { simple: 10, vip: 9, jacuzzi: 7 },
         lechateau: { simple: 5,  vip: 6, jacuzzi: 4 },
       };
-      // Si pide "todas" o "todo", retornar los tres tipos
+
+      // Si pide ambos moteles
+      const esAmbos = motelRaw.includes('ambos') || motelRaw.includes('los dos') || motelRaw.includes('both');
+      const motel = motelRaw.includes('chateau') ? 'lechateau' : 'apolo';
+
+      if (esAmbos) {
+        // Retornar resultado para ambos moteles
+        const tipoFinal = (tipo === '' || tipo === 'todas' || tipo === 'todo') ? 'todas' : tipo;
+        if (tipoFinal === 'todas') {
+          const tipos = ['simple', 'vip', 'jacuzzi'];
+          const apolo = tipos.map(t => ({ tipo: t, cantidad: cantidades.apolo[t] }));
+          const chateau = tipos.map(t => ({ tipo: t, cantidad: cantidades.lechateau[t] }));
+          return `RESULTADO_FOTOS: {"ok": true, "ambos": true, "apolo": {"todas": true, "tipos": ${JSON.stringify(apolo)}}, "lechateau": {"todas": true, "tipos": ${JSON.stringify(chateau)}}}`;
+        }
+        const cantApolo = cantidades.apolo[tipoFinal] || 0;
+        const cantChateau = cantidades.lechateau[tipoFinal] || 0;
+        return `RESULTADO_FOTOS: {"ok": true, "ambos": true, "apolo": {"tipo": "${tipoFinal}", "cantidad": ${cantApolo}}, "lechateau": {"tipo": "${tipoFinal}", "cantidad": ${cantChateau}}}`;
+      }
+
+      // Un solo motel
       if (tipo === 'todas' || tipo === 'todo' || tipo === 'all' || tipo === '') {
         const tipos = ['simple', 'vip', 'jacuzzi'];
         const resultado = tipos.map(t => ({ tipo: t, cantidad: cantidades[motel][t] }));
@@ -779,6 +798,17 @@ async function procesarMensaje(telefono, mensajeUsuario, numeroPrueba = null) {
   const msgNormalizado = mensajeUsuario.trim().toLowerCase();
   const esRepetido = ultimoMensaje.get(telefono) === msgNormalizado;
   ultimoMensaje.set(telefono, msgNormalizado);
+
+  // Si el cliente se despide y el bot ya se despidió antes, no responder
+  const despedidas = ['hasta pronto', 'adios', 'adiós', 'chao', 'chau', 'bye', 'hasta luego', 'ok gracias', 'muchas gracias', 'ya gracias', 'listo gracias', 'gracias igual', 'ok chao', 'ok bye'];
+  const msgLower = msgNormalizado.toLowerCase().trim();
+  const esDespedida = despedidas.some(d => msgLower === d || msgLower === d + '!' || msgLower === d + '.');
+  if (esDespedida) {
+    const historialActual = conversaciones.get(telefono) || [];
+    const ultimoBot = historialActual.filter(m => m.role === 'assistant').slice(-1)[0]?.content || '';
+    const botSeDespidio = ['hasta pronto', 'adios', 'adiós', 'chao', 'te esperamos', '¡hasta', 'hasta la'].some(d => ultimoBot.toLowerCase().includes(d));
+    if (botSeDespidio) return null;
+  }
 
   if (!conversaciones.has(telefono)) conversaciones.set(telefono, []);
   const historial = conversaciones.get(telefono);
