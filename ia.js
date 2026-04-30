@@ -800,7 +800,7 @@ async function procesarMensaje(telefono, mensajeUsuario, numeroPrueba = null) {
   ultimoMensaje.set(telefono, msgNormalizado);
 
   // Si el cliente se despide y el bot ya se despidió antes, no responder
-  const despedidas = ['hasta pronto', 'adios', 'adiós', 'chao', 'chau', 'bye', 'hasta luego', 'ok gracias', 'muchas gracias', 'ya gracias', 'listo gracias', 'gracias igual', 'ok chao', 'ok bye'];
+  const despedidas = ['hasta pronto', 'adios', 'adiós', 'chao', 'chau', 'bye', 'hasta luego', 'ok chao', 'ok bye', 'ya chao', 'chao entonces', 'hasta'];
   const msgLower = msgNormalizado.toLowerCase().trim();
   const esDespedida = despedidas.some(d => msgLower === d || msgLower === d + '!' || msgLower === d + '.');
   if (esDespedida) {
