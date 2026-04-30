@@ -423,13 +423,16 @@ CARTA DE PRECIOS:
 - NUNCA envíes este enlace para fotos de habitaciones — para eso existe la acción enviar_fotos.
 
 FOTOS DE HABITACIONES:
-- Si pide fotos de un tipo específico de UN motel: usa enviar_fotos con motel y tipo
-- Si pide fotos de TODAS las habitaciones de un motel: usa enviar_fotos con tipo "todas"
-- Si pide fotos de LOS DOS MOTELES: usa enviar_fotos con motel "ambos" y el tipo que pidió
+- Un tipo, un motel: [ACCION:enviar_fotos]{"motel": "apolo", "tipo": "vip"}[/ACCION]
+- Múltiples tipos, un motel: ejecuta una acción por cada tipo pedido:
+  [ACCION:enviar_fotos]{"motel": "apolo", "tipo": "simple"}[/ACCION][ACCION:enviar_fotos]{"motel": "apolo", "tipo": "vip"}[/ACCION]
+- Todas las habitaciones de un motel: [ACCION:enviar_fotos]{"motel": "apolo", "tipo": "todas"}[/ACCION]
+- Un tipo, ambos moteles: [ACCION:enviar_fotos]{"motel": "ambos", "tipo": "jacuzzi"}[/ACCION]
+- Múltiples tipos, ambos moteles: una acción por cada tipo con motel "ambos":
+  [ACCION:enviar_fotos]{"motel": "ambos", "tipo": "simple"}[/ACCION][ACCION:enviar_fotos]{"motel": "ambos", "tipo": "vip"}[/ACCION]
 - Si no especifica motel, pregunta primero cuál motel
-- Valores válidos: motel: "apolo" o "lechateau" | tipo: "simple", "vip", "jacuzzi" o "todas"
-- Ejemplo un motel: [ACCION:enviar_fotos]{"motel": "apolo", "tipo": "vip"}[/ACCION]
-- Ejemplo dos moteles: [ACCION:enviar_fotos]{"motel": "apolo", "tipo": "jacuzzi"}[/ACCION][ACCION:enviar_fotos]{"motel": "lechateau", "tipo": "jacuzzi"}[/ACCION]
+- Tipos válidos: "simple", "vip", "jacuzzi", "todas"
+- Moteles válidos: "apolo", "lechateau", "ambos"
 - Después de las fotos pregunta brevemente si desea reservar
 
 RECLAMOS: ${process.env.EMAIL_RECLAMOS || 'servicioalcliente@motelesapolo.cl'} (lunes a viernes 9:00 a 17:00 hrs)
