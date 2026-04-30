@@ -221,15 +221,16 @@ IMPORTANTE SOBRE EL ACCESO:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 TARIFA SEMANA (domingo 8:00 AM a viernes 7:59 AM):
-🏠 Simple:  3h $27.000 | Noche $35.000 | 12h $35.000 | 24h $55.000
-⭐ VIP:     3h $32.000 | Noche $42.000 | 12h $42.000 | 24h $65.000
-🛁 Jacuzzi: 3h $40.000 | Noche $51.000 | 12h $51.000 | 24h $75.000
+🏠 Simple:  3h/6x3 $27.000 | Noche $35.000 | 12h $35.000 | 24h $55.000
+⭐ VIP:     3h/6x3 $32.000 | Noche $42.000 | 12h $42.000 | 24h $65.000
+🛁 Jacuzzi: 3h/6x3 $40.000 | Noche $51.000 | 12h $51.000 | 24h $75.000
 
 TARIFA FIN DE SEMANA (viernes 8:00 AM a domingo 7:59 AM, y vísperas de feriado):
-🏠 Simple:  3h $29.000 | Noche $39.000 | 12h $39.000 | 24h $55.000
-⭐ VIP:     3h $37.000 | Noche $46.000 | 12h $46.000 | 24h $65.000
-🛁 Jacuzzi: 3h $44.000 | Noche $53.000 | 12h $53.000 | 24h $75.000
+🏠 Simple:  3h/6x3 $29.000 | Noche $39.000 | 12h $39.000 | 24h $55.000
+⭐ VIP:     3h/6x3 $37.000 | Noche $46.000 | 12h $46.000 | 24h $65.000
+🛁 Jacuzzi: 3h/6x3 $44.000 | Noche $53.000 | 12h $53.000 | 24h $75.000
 
+IMPORTANTE: El precio de 3h y 6x3 es fijo — no cambia según la hora del día. Solo varía entre semana y fin de semana.
 NOTA: Noche y 12 horas tienen el mismo precio pero son paquetes distintos. Noche: entrada 22:00-12:00, salida siempre 12:00. 12 horas: 12h corridas desde cualquier hora.
 
 
@@ -492,6 +493,14 @@ TIPOS VÁLIDOS:
 - jacuzzi_3h_semana| jacuzzi_6x3_semana| jacuzzi_noche_semana| jacuzzi_24h
 - jacuzzi_3h_finde | jacuzzi_6x3_finde | jacuzzi_noche_finde
 NOTA: Los tipos 6x3 tienen la misma tarifa que los 3h pero duración de 6 horas (promoción 6x3)
+
+PRECIOS SEGÚN DURACIÓN (MUY IMPORTANTE):
+- Si el cliente pidió 3h o 6x3 → usar precio de _3h (semana o finde según fecha)
+- Si el cliente pidió noche → usar precio de _noche (semana o finde según fecha)
+- Si el cliente pidió 12h → usar precio de _12h (semana o finde según fecha)
+- Si el cliente pidió 24h → usar precio de _24h
+- NUNCA usar precio de noche para cotizar 3h o 6x3, aunque la hora de llegada sea tarde (23:00, 11 PM, etc.)
+- La hora de llegada NO define el tipo de precio — lo define la duración que el cliente eligió
 
 REGLAS:
 - Verifica disponibilidad ANTES de confirmar
