@@ -708,7 +708,7 @@ Datos: ${datos.motel} | ${tipoLabel} | ${datos.fechaInicio} | $${precio.toLocale
       const motelRaw = (datos.motel || '').toLowerCase();
       const tipo = (datos.tipo || '').toLowerCase();
       const cantidades = {
-        apolo:     { simple: 10, vip: 9, jacuzzi: 7 },
+        apolo:     { simple: 11, vip: 8, jacuzzi: 7 },
         lechateau: { simple: 5,  vip: 6, jacuzzi: 4 },
       };
 
