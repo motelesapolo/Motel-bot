@@ -16,6 +16,7 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const conversaciones = new Map();
 const reservasEnProgreso = new Map();
 const reservasConfirmadas = new Map();   // { id, googleEventId } por reservaId
+const bloqueosManuales = new Map();      // 'motel_tipo' → true (bloqueado manualmente)
 const clientesEsperandoAgente = new Set();
 const preferenciaCliente = new Map();    // último tipo hab reservado por teléfono
 const ultimoMensaje = new Map();         // último mensaje para detectar repetición
@@ -857,10 +858,25 @@ async function procesarMensaje(telefono, mensajeUsuario, numeroPrueba = null) {
   const historialReciente = historial.slice(-20);
 
   try {
+    // Agregar bloqueos manuales al system prompt
+    const bloqueos = [];
+    ['apolo','chateau'].forEach(m => {
+      ['simple','vip','jacuzzi'].forEach(t => {
+        if (bloqueosManuales.get(`${m}_${t}`)) {
+          const mn = m === 'chateau' ? 'Le Chateau' : 'Apolo';
+          const tn = t.charAt(0).toUpperCase()+t.slice(1);
+          bloqueos.push(`- ${tn} en Motel ${mn}: NO DISPONIBLE ahora. No ofrecer. Sugerir alternativas disponibles.`);
+        }
+      });
+    });
+    const bloqueosTexto = bloqueos.length > 0
+      ? '\n\n⚠️ OCUPACIÓN EN TIEMPO REAL (clientes sin reserva):\n' + bloqueos.join('\n')
+      : '';
+
     let respuesta = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 1000,
-      system: getSystemPrompt(),
+      system: getSystemPrompt() + bloqueosTexto,
       messages: historialReciente,
     });
 
@@ -937,4 +953,44 @@ setInterval(() => {
   }
 }, 60 * 60 * 1000);
 
-module.exports = { procesarMensaje, limpiarConversacion, setClienteWhatsApp, reactivarCliente, esTarifaFinde };
+function bloquearHabitacion(motel, tipo) {
+  const moteles = motel === 'todo' ? ['apolo', 'chateau'] : [motel];
+  const tipos = tipo ? [tipo] : ['simple', 'vip', 'jacuzzi'];
+  for (const m of moteles)
+    for (const t of tipos)
+      bloqueosManuales.set(`${m}_${t}`, true);
+}
+
+function liberarHabitacion(motel, tipo) {
+  const moteles = motel === 'todo' ? ['apolo', 'chateau'] : [motel];
+  const tipos = tipo ? [tipo] : ['simple', 'vip', 'jacuzzi'];
+  for (const m of moteles)
+    for (const t of tipos)
+      bloqueosManuales.delete(`${m}_${t}`);
+}
+
+function getEstadoBloqueos() {
+  const moteles = { apolo: 'Motel Apolo', chateau: 'Le Chateau' };
+  const tipos = ['simple', 'vip', 'jacuzzi'];
+  let msg = '📊 *Disponibilidad manual:*\n';
+  for (const [mk, mn] of Object.entries(moteles)) {
+    msg += `
+*${mn}:*
+`;
+    for (const t of tipos) {
+      const bloqueado = bloqueosManuales.get(`${mk}_${t}`);
+      msg += `  ${t.charAt(0).toUpperCase()+t.slice(1)}: ${bloqueado ? '❌ No disponible' : '✅ Disponible'}
+`;
+    }
+  }
+  return msg;
+}
+
+function estaBloquedo(motel, tipo) {
+  const mk = motel.toLowerCase().includes('chateau') ? 'chateau' : 'apolo';
+  const tk = tipo.toLowerCase().includes('jacuzzi') ? 'jacuzzi' :
+             tipo.toLowerCase().includes('vip') ? 'vip' : 'simple';
+  return bloqueosManuales.get(`${mk}_${tk}`) === true;
+}
+
+module.exports = { procesarMensaje, limpiarConversacion, setClienteWhatsApp, reactivarCliente, esTarifaFinde, bloquearHabitacion, liberarHabitacion, getEstadoBloqueos, estaBloquedo };

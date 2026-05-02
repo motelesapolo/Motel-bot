@@ -4,7 +4,7 @@
 require('dotenv').config();
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const express = require('express');
-const { procesarMensaje, limpiarConversacion, setClienteWhatsApp, reactivarCliente } = require('./ia');
+const { procesarMensaje, limpiarConversacion, setClienteWhatsApp, reactivarCliente, bloquearHabitacion, liberarHabitacion, getEstadoBloqueos } = require('./ia');
 const { iniciarRecordatorios } = require('./recordatorios');
 
 const app = express();
@@ -180,6 +180,32 @@ cliente.on('message', async (mensaje) => {
     if (texto === '/limpiar') {
       limpiarConversacion(telefono);
       await mensaje.reply('🧹 Conversación reiniciada.');
+      return;
+    }
+    // Comandos de disponibilidad manual
+    if (texto.startsWith('/ocupado')) {
+      const partes = texto.split(' ');
+      const motel = partes[1] || 'todo';
+      const tipo  = partes[2] || null;
+      bloquearHabitacion(motel, tipo);
+      const mn = motel === 'apolo' ? 'Apolo' : motel === 'chateau' ? 'Le Chateau' : 'ambos moteles';
+      const tn = tipo ? ` — ${tipo.charAt(0).toUpperCase()+tipo.slice(1)}` : ' (todas)';
+      await mensaje.reply(`❌ Bloqueado: ${mn}${tn}
+Usa /libre para reactivar.`);
+      return;
+    }
+    if (texto.startsWith('/libre')) {
+      const partes = texto.split(' ');
+      const motel = partes[1] || 'todo';
+      const tipo  = partes[2] || null;
+      liberarHabitacion(motel, tipo);
+      const mn = motel === 'apolo' ? 'Apolo' : motel === 'chateau' ? 'Le Chateau' : 'ambos moteles';
+      const tn = tipo ? ` — ${tipo.charAt(0).toUpperCase()+tipo.slice(1)}` : ' (todas)';
+      await mensaje.reply(`✅ Liberado: ${mn}${tn}`);
+      return;
+    }
+    if (texto === '/disponibilidad') {
+      await mensaje.reply(getEstadoBloqueos());
       return;
     }
     // Reactivar bot para cliente específico
