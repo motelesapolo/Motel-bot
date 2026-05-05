@@ -253,6 +253,23 @@ Usa /libre para reactivar.`);
 
     const chatId = mensaje.from;
 
+    // Si la respuesta incluye tarifas, enviar la imagen
+    if (respuesta && typeof respuesta === 'object' && respuesta.tarifas) {
+      const { MessageMedia } = require('whatsapp-web.js');
+      const path = require('path');
+      const fs = require('fs');
+      const rutaTarifas = path.join(__dirname, 'TARIFAS_APOLO.jpeg');
+      if (fs.existsSync(rutaTarifas)) {
+        const media = MessageMedia.fromFilePath(rutaTarifas);
+        await cliente.sendMessage(chatId, media);
+        console.log(`📸 Tarifas enviadas a ${telefono}`);
+      } else {
+        console.error('❌ No se encontró TARIFAS_APOLO.jpeg');
+      }
+      await chat.clearState();
+      return;
+    }
+
     // Si la respuesta incluye fotos, enviarlas
     if (respuesta && typeof respuesta === 'object' && respuesta.fotos) {
       const { texto: textoRespuesta, fotos } = respuesta;

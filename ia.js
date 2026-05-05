@@ -17,6 +17,7 @@ const conversaciones = new Map();
 const reservasEnProgreso = new Map();
 const reservasConfirmadas = new Map();   // { id, googleEventId } por reservaId
 const bloqueosManuales = new Map();      // 'motel_tipo' → true (bloqueado manualmente)
+const tarifasEnviadas = new Set();       // teléfonos que ya recibieron la foto de tarifas
 const clientesEsperandoAgente = new Set();
 const preferenciaCliente = new Map();    // último tipo hab reservado por teléfono
 const ultimoMensaje = new Map();         // último mensaje para detectar repetición
@@ -201,20 +202,10 @@ PRIORIDAD EN CADA CONVERSACIÓN:
 
 VENTAS (sin hostigar):
 - Si el cliente pregunta precios → responde el precio, NO preguntes si quiere reservar a menos que muestre intención clara
-- Al mostrar precios usar este formato exacto, sin asteriscos, sin emojis, sin paréntesis:
-  "Aquí tienes nuestros precios:
-
-  TARIFA SEMANA hasta viernes 7:59 AM
-  Simple: 3h $27.000 | Noche $35.000 | 24h $55.000
-  VIP: 3h $32.000 | Noche $42.000 | 24h $65.000
-  Jacuzzi: 3h $40.000 | Noche $51.000 | 24h $75.000
-
-  TARIFA FIN DE SEMANA viernes 8:00 AM a domingo 7:59 AM
-  Simple: 3h $29.000 | Noche $39.000 | 24h $55.000
-  VIP: 3h $37.000 | Noche $46.000 | 24h $65.000
-  Jacuzzi: 3h $44.000 | Noche $53.000 | 24h $75.000
-
-  Promo 6x3: pagas 3h y te quedas 6h, mismo precio que 3h."
+- Si el cliente pregunta por precios o tarifas y NO ha recibido la foto aún → usar acción enviar_tarifas
+- Si el cliente pregunta por precio de una habitación específica y YA recibió la foto → responder haciendo referencia a la foto anterior: "En la imagen que te mandé antes están todos los precios, incluyendo el de [tipo]"
+- NO escribir los precios en texto, siempre referirse a la imagen
+- Ejemplo primera vez: [ACCION:enviar_tarifas]{}[/ACCION]
 - Si muestra intención de reservar → avanza directo al cierre sin rodeos
 - Si duda entre opciones → sugiere una concreta, no preguntes si quiere reservar
 - Ofrece reservar MÁXIMO UNA VEZ por conversación. Si el cliente no responde afirmativamente, no vuelvas a preguntar
@@ -736,6 +727,10 @@ Datos: ${datos.motel} | ${tipoLabel} | ${datos.fechaInicio} | $${precio.toLocale
       const result = await cancelarReserva(datos.reservaId);
       return `RESULTADO_CANCELACION: ${JSON.stringify(result)}`;
     }
+    case 'enviar_tarifas': {
+      return 'RESULTADO_TARIFAS: {"ok": true}';
+    }
+
     case 'enviar_fotos': {
       const motelRaw = (datos.motel || '').toLowerCase();
       const tipo = (datos.tipo || '').toLowerCase();
@@ -894,11 +889,14 @@ async function procesarMensaje(telefono, mensajeUsuario, numeroPrueba = null) {
     const bloqueosTexto = bloqueos.length > 0
       ? '\n\n⚠️ OCUPACIÓN EN TIEMPO REAL (clientes sin reserva):\n' + bloqueos.join('\n')
       : '';
+    const tarifasTexto = tarifasEnviadas.has(telefono)
+      ? '\n\n[SISTEMA: Ya se envió la foto de tarifas a este cliente. Si pregunta por precios, hacer referencia a esa foto en vez de mandar de nuevo.]'
+      : '';
 
     let respuesta = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 1000,
-      system: getSystemPrompt() + bloqueosTexto,
+      system: getSystemPrompt() + bloqueosTexto + tarifasTexto,
       messages: historialReciente,
     });
 
@@ -911,14 +909,19 @@ async function procesarMensaje(telefono, mensajeUsuario, numeroPrueba = null) {
       console.log(`🔧 Acciones detectadas:`, textoRespuesta.match(/\[ACCION:(\w+)\]/g));
       const resultados = await ejecutarAccionesIA(textoRespuesta, telefono);
       console.log(`🔧 Resultado acciones:`, resultados.substring(0, 200));
-      // Capturar fotos si hay
-      fotosParaEnviar = extraerFotos(resultados);
+      // Capturar tarifas si hay
+      if (resultados.includes('RESULTADO_TARIFAS')) {
+        fotosParaEnviar = { tarifas: true };
+      } else {
+        // Capturar fotos si hay
+        fotosParaEnviar = extraerFotos(resultados);
+      }
       let respuestaFinal;
       try {
         respuestaFinal = await anthropic.messages.create({
           model: 'claude-sonnet-4-20250514',
           max_tokens: 1000,
-          system: getSystemPrompt() + bloqueosTexto,
+          system: getSystemPrompt() + bloqueosTexto + tarifasTexto,
           messages: [
             ...historialReciente,
             { role: 'assistant', content: textoRespuesta },
@@ -966,6 +969,11 @@ Te esperamos. El pago es en recepción al llegar.`;
     historial.push({ role: 'assistant', content: respuestaLimpia });
     conversaciones.set(telefono, historial.slice(-40));
 
+    // Si hay tarifas, retornar objeto con tarifas
+    if (fotosParaEnviar?.tarifas) {
+      tarifasEnviadas.add(telefono);
+      return { texto: respuestaLimpia, tarifas: true };
+    }
     // Si hay fotos, retornar objeto con texto + info de fotos
     if (fotosParaEnviar) return { texto: respuestaLimpia, fotos: fotosParaEnviar };
     return respuestaLimpia;
