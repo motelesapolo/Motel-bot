@@ -184,7 +184,15 @@ No des explicaciones largas. Concreta rápido.` : ''}
 - Si no sabes algo, ofreces transferir con un agente
 - NUNCA inventes ni supongas información que no esté en estas instrucciones. Si no sabes algo responde: "No tengo esa información, pero puedes consultarlo al ${process.env.MOTEL_TELEFONO} 😊"
 - NO uses tu conocimiento general para rellenar vacíos. Solo lo que está aquí.
-- ESTILO DE RESPUESTA: Muy breve y directo. Máximo 3 líneas por respuesta salvo en resúmenes de reserva. Sin listas largas, sin negritas, sin explicaciones que el cliente no pidió. Una pregunta a la vez. Responde lo que te preguntan, nada más.
+- ESTILO DE RESPUESTA: Breve y directo. SIN asteriscos ni negritas (**texto**), SIN bullets (• o -), sin listas. Máximo 2 emojis por mensaje. Sin explicaciones que el cliente no pidió. Una pregunta a la vez.
+- RESUMEN DE RESERVA: incluir toda la info relevante pero sin asteriscos, sin bullets, sin negritas. Formato limpio:
+
+Reserva confirmada ✅
+N° [ID] — [Nombre]
+[Motel] | [Tipo] | [Fecha] [Hora]
+$[Precio] — pago al llegar (efectivo, débito o crédito)
+Estacionamiento gratuito en Marín 021
+La propina es voluntaria 😊
 
 PRIORIDAD EN CADA CONVERSACIÓN:
 1. Resolver lo que el cliente pregunta
@@ -193,6 +201,20 @@ PRIORIDAD EN CADA CONVERSACIÓN:
 
 VENTAS (sin hostigar):
 - Si el cliente pregunta precios → responde el precio, NO preguntes si quiere reservar a menos que muestre intención clara
+- Al mostrar precios usar este formato exacto, sin asteriscos, sin emojis, sin paréntesis:
+  "Aquí tienes nuestros precios:
+
+  TARIFA SEMANA hasta viernes 7:59 AM
+  Simple: 3h $27.000 | Noche $35.000 | 24h $55.000
+  VIP: 3h $32.000 | Noche $42.000 | 24h $65.000
+  Jacuzzi: 3h $40.000 | Noche $51.000 | 24h $75.000
+
+  TARIFA FIN DE SEMANA viernes 8:00 AM a domingo 7:59 AM
+  Simple: 3h $29.000 | Noche $39.000 | 24h $55.000
+  VIP: 3h $37.000 | Noche $46.000 | 24h $65.000
+  Jacuzzi: 3h $44.000 | Noche $53.000 | 24h $75.000
+
+  Promo 6x3: pagas 3h y te quedas 6h, mismo precio que 3h."
 - Si muestra intención de reservar → avanza directo al cierre sin rodeos
 - Si duda entre opciones → sugiere una concreta, no preguntes si quiere reservar
 - Ofrece reservar MÁXIMO UNA VEZ por conversación. Si el cliente no responde afirmativamente, no vuelvas a preguntar
@@ -891,17 +913,44 @@ async function procesarMensaje(telefono, mensajeUsuario, numeroPrueba = null) {
       console.log(`🔧 Resultado acciones:`, resultados.substring(0, 200));
       // Capturar fotos si hay
       fotosParaEnviar = extraerFotos(resultados);
-      const respuestaFinal = await anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        system: getSystemPrompt(),
-        messages: [
-          ...historialReciente,
-          { role: 'assistant', content: textoRespuesta },
-          { role: 'user', content: `SISTEMA: Resultados:\n${resultados}\nResponde al cliente sin bloques [ACCION].` },
-        ],
-      });
-      textoRespuesta = respuestaFinal.content[0].text;
+      let respuestaFinal;
+      try {
+        respuestaFinal = await anthropic.messages.create({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1000,
+          system: getSystemPrompt() + bloqueosTexto,
+          messages: [
+            ...historialReciente,
+            { role: 'assistant', content: textoRespuesta },
+            { role: 'user', content: `SISTEMA: Resultados:\n${resultados}\nResponde al cliente sin bloques [ACCION].` },
+          ],
+        });
+        textoRespuesta = respuestaFinal.content[0].text;
+      } catch (errFinal) {
+        console.error('Error en segunda llamada API:', errFinal.message);
+        // Si falla la segunda llamada, armar confirmación con los datos que ya tenemos
+        if (resultados.includes('"ok":true') && resultados.includes('"id"')) {
+          try {
+            const resData = JSON.parse(resultados.match(/RESULTADO_RESERVA: (\{.*\})/)?.[1] || '{}');
+            const id = resData.id || '------';
+            const nombre = datos.nombre || '';
+            const motelNombre = datos.motel === 'LeChateaU' || datos.motel?.toLowerCase().includes('chateau') ? 'Le Chateau' : 'Apolo';
+            const tipoLabel = tipo.toLowerCase().includes('jacuzzi') ? 'Jacuzzi' : tipo.toLowerCase().includes('vip') ? 'VIP' : 'Simple';
+            const precioStr = resData.precio ? `$${resData.precio.toLocaleString('es-CL')}` : '';
+            const inicioDate = resData.inicio ? new Date(resData.inicio).toLocaleString('es-CL', { timeZone: 'America/Santiago', weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : '';
+            textoRespuesta = `Reserva confirmada ${nombre ? `para ${nombre}` : ''} 😊
+🔖 N° ${id}
+🏨 Motel ${motelNombre}
+🛏️ ${tipoLabel}
+📅 ${inicioDate}
+💰 ${precioStr}
+Te esperamos. El pago es en recepción al llegar.`;
+          } catch {
+            const idMatch = resultados.match(/"id":"?(\d+)"?/);
+            textoRespuesta = `Reserva confirmada 😊 N° ${idMatch?.[1] || '------'}. Te esperamos.`;
+          }
+        }
+      }
     }
 
     // Verificar si se debe transferir a agente
