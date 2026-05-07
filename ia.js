@@ -523,6 +523,7 @@ REGLAS:
 - No expliques al cliente los detalles de cuándo cambia la tarifa, solo indica el precio correcto
 - SIEMPRE manda la fecha completa con hora en fechaInicio (ej: "2026-04-20T23:00:00"), NUNCA solo la fecha sin hora
 - NUNCA confirmes una reserva ni entregues un número de reserva sin antes ejecutar [ACCION:crear_reserva]. El número lo entrega el sistema en RESULTADO_RESERVA, no lo inventes.
+- Si el sistema responde RESERVA_YA_CREADA: significa que ya se creó una reserva en esta conversación. NO crear otra. Responder con la confirmación de la reserva existente usando el ID que retorna.
 - No hay restricción de horario general — se puede reservar a cualquier hora
 
 - Si no hay disponibilidad, ofrece el otro motel o un horario alternativo`;
@@ -622,6 +623,12 @@ async function procesarAccion(accion, datos, telefono) {
       return `RESULTADO_DISPONIBILIDAD: ${JSON.stringify(result)}`;
     }
     case 'crear_reserva': {
+      // Evitar crear reserva duplicada si ya se creó una en esta conversación recientemente
+      const reservaReciente = reservasEnProgreso.get(telefono);
+      if (reservaReciente && !datos.esModificacion) {
+        return `RESULTADO_RESERVA: {"ok": false, "error": "RESERVA_YA_CREADA", "id": "${reservaReciente}"}`;
+      }
+
       // Si fechaInicio no tiene hora, usar la hora actual en Santiago
       let fechaInicio = datos.fechaInicio || '';
       if (fechaInicio && !fechaInicio.includes('T')) {
