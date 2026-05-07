@@ -16,6 +16,8 @@ let botPausado = false;
 let numeroPrueba = null; // Cuando está activo, solo responde a este número
 const pausasPorAdmin = new Map(); // telefono → timestamp de pausa por respuesta admin
 const mensajesProcesados = new Set(); // IDs de mensajes ya procesados para evitar duplicados
+const procesandoCliente = new Map();   // telefono → timeoutId del debounce
+const mensajesPendientes = new Map();  // telefono → array de textos acumulados
 
 app.get('/', (req, res) => {
   if (botConectado) {
@@ -153,8 +155,8 @@ cliente.on('message', async (mensaje) => {
   console.log(`📩 [${new Date().toLocaleTimeString('es-CL')}] De ${telefono}: ${texto}`);
 
   // Algunos números llegan con formato @lid - mapear al número real
-  const LID_ADMINS = ['202902928908358']; // @lid del +56991655665
-  const ADMINS = [process.env.ADMIN_NUMERO, '56991655665', '56999644093', ...LID_ADMINS].filter(Boolean);
+  const LID_ADMINS = ['202902928908358', '217274023702535']; // @lid admins
+  const ADMINS = [process.env.ADMIN_NUMERO, '56991655665', '56999644093', '56999644093', ...LID_ADMINS].filter(Boolean);
 
   // ── Comandos Admin ────────────────────────────────────────
   if (ADMINS.includes(telefono)) {
@@ -232,6 +234,8 @@ Usa /libre para reactivar.`);
       }
       return;
     }
+    // Si el admin escribe cualquier cosa que no sea comando, ignorar
+    return;
   }
 
   // Si está pausado globalmente, no responder
@@ -249,11 +253,33 @@ Usa /libre para reactivar.`);
     pausasPorAdmin.delete(telefono); // Limpiar pausa expirada
   }
 
+  // Debounce: acumula mensajes rápidos y los procesa juntos después de 1.5s de silencio
+  if (!mensajesPendientes.has(telefono)) mensajesPendientes.set(telefono, []);
+  mensajesPendientes.get(telefono).push(texto);
+
+  if (procesandoCliente.get(telefono)) {
+    clearTimeout(procesandoCliente.get(telefono));
+  }
+
+  await new Promise(resolve => {
+    const timer = setTimeout(resolve, 1500);
+    procesandoCliente.set(telefono, timer);
+  });
+  procesandoCliente.delete(telefono);
+
+  // Tomar todos los mensajes acumulados y unirlos
+  const pendientes = mensajesPendientes.get(telefono) || [];
+  mensajesPendientes.delete(telefono);
+  const textoFinal = pendientes.join(' ');
+  if (textoFinal !== texto && pendientes.length > 1) {
+    console.log(`📨 Mensajes acumulados de ${telefono}: "${textoFinal}"`);
+  }
+
   const chat = await mensaje.getChat();
   await chat.sendStateTyping();
 
   try {
-    const respuesta = await procesarMensaje(telefono, texto, numeroPrueba);
+    const respuesta = await procesarMensaje(telefono, textoFinal || texto, numeroPrueba);
     
     // Si es null, el cliente está esperando agente - no responder
     if (respuesta === null) {
@@ -361,6 +387,7 @@ Usa /libre para reactivar.`);
     console.error('Error:', error);
     await mensaje.reply('😔 Estamos teniendo un problema técnico. Te conectamos con un agente en breve 😊');
   } finally {
+    procesandoCliente.delete(telefono);
     await chat.clearState();
   }
 });
