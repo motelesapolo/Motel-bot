@@ -15,6 +15,7 @@ let botConectado = false;
 let botPausado = false;
 let numeroPrueba = null; // Cuando está activo, solo responde a este número
 const pausasPorAdmin = new Map(); // telefono → timestamp de pausa por respuesta admin
+const mensajesProcesados = new Set(); // IDs de mensajes ya procesados para evitar duplicados
 
 app.get('/', (req, res) => {
   if (botConectado) {
@@ -98,6 +99,18 @@ cliente.on('message', async (mensaje) => {
   if (mensaje.from.includes('@newsletter')) return;
   if (mensaje.type === 'e2e_notification' || mensaje.type === 'notification_template') return;
   if (!mensaje.from || !mensaje.body === undefined) return;
+
+  // Evitar procesar el mismo mensaje dos veces
+  const msgId = mensaje.id?.id || mensaje.id?._serialized || '';
+  if (msgId && mensajesProcesados.has(msgId)) {
+    console.log(`⚠️ Mensaje duplicado ignorado: ${msgId}`);
+    return;
+  }
+  if (msgId) {
+    mensajesProcesados.add(msgId);
+    // Limpiar mensajes viejos cada 1000 para no acumular memoria
+    if (mensajesProcesados.size > 1000) mensajesProcesados.clear();
+  }
 
   const rawFrom = mensaje.from || '';
   let telefono = rawFrom.replace('@c.us', '').replace('@lid', '');
