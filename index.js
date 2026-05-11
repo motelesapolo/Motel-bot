@@ -385,7 +385,7 @@ Usa /libre para reactivar.`);
     }
   } catch (error) {
     console.error('Error:', error);
-    await mensaje.reply('😔 Estamos teniendo un problema técnico. Te conectamos con un agente en breve 😊');
+    console.error('Error silencioso — no se respondió al cliente:', error.message);
   } finally {
     procesandoCliente.delete(telefono);
     await chat.clearState();

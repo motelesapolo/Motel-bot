@@ -13,6 +13,24 @@ const {
 require('dotenv').config();
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+// Llamada a la API con reintento automático en caso de rate limit (429)
+async function llamarAPI(params, intentos = 3) {
+  for (let i = 1; i <= intentos; i++) {
+    try {
+      return await anthropic.messages.create(params);
+    } catch (err) {
+      const es429 = err.status === 429 || err.message?.includes('rate_limit');
+      if (es429 && i < intentos) {
+        const espera = 5000 * i; // 5s, 10s
+        console.log(`⏳ Rate limit 429 — reintentando en ${espera/1000}s (intento ${i}/${intentos})`);
+        await new Promise(r => setTimeout(r, espera));
+      } else {
+        throw err;
+      }
+    }
+  }
+}
 const conversaciones = new Map();
 const reservasEnProgreso = new Map();
 const reservasConfirmadas = new Map();   // { id, googleEventId } por reservaId
@@ -194,6 +212,7 @@ N° [ID] — [Nombre]
 $[Precio] — pago al llegar (efectivo, débito o crédito)
 Estacionamiento gratuito en Marín 021
 La propina es voluntaria 😊
+Tu reserva se mantendrá disponible hasta 45 minutos después de la hora acordada.
 
 PRIORIDAD EN CADA CONVERSACIÓN:
 1. Resolver lo que el cliente pregunta
@@ -904,7 +923,7 @@ async function procesarMensaje(telefono, mensajeUsuario, numeroPrueba = null) {
       ? '\n\n[SISTEMA: Ya se envió la foto de tarifas a este cliente. Si pregunta por precios, hacer referencia a esa foto en vez de mandar de nuevo.]'
       : '';
 
-    let respuesta = await anthropic.messages.create({
+    let respuesta = await llamarAPI({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 1000,
       system: getSystemPrompt() + bloqueosTexto + tarifasTexto,
@@ -929,7 +948,7 @@ async function procesarMensaje(telefono, mensajeUsuario, numeroPrueba = null) {
       }
       let respuestaFinal;
       try {
-        respuestaFinal = await anthropic.messages.create({
+        respuestaFinal = await llamarAPI({
           model: 'claude-sonnet-4-20250514',
           max_tokens: 1000,
           system: getSystemPrompt() + bloqueosTexto + tarifasTexto,

@@ -20,33 +20,40 @@ function getSheetsClient() {
 // ── Guardar reserva en Google Sheets (respaldo) ───────────────
 async function guardarEnSheets(datos) {
   const SHEET_ID = process.env.GOOGLE_SHEET_ID;
-  if (!SHEET_ID) return; // Si no está configurado, omitir
-  try {
-    const sheets = getSheetsClient();
-    const fila = [
-      new Date().toLocaleString('es-CL', { timeZone: 'America/Santiago' }),
-      datos.reservaId || '',
-      datos.nombre || '',
-      (datos.telefono || '').replace('+', '') || '',
-      datos.motel || '',
-      datos.tipo || '',
-      datos.fechaInicio || '',
-      datos.duracionHoras || '',
-      datos.precio ? `$${datos.precio.toLocaleString('es-CL')}` : '',
-      datos.estado || 'confirmada',
-      datos.fallback ? 'RESPALDO (Calendar falló)' : 'OK',
-      datos.googleEventId || '',
-    ];
-    await sheets.spreadsheets.values.append({
-      spreadsheetId: SHEET_ID,
-      range: 'Reservas!A:K',
-      valueInputOption: 'RAW',
-      resource: { values: [fila] },
-    });
-    console.log(`📊 Reserva guardada en Sheets: ${datos.reservaId}`);
-  } catch (err) {
-    console.error('Error guardando en Sheets:', err.message);
+  if (!SHEET_ID) return;
+  const fila = [
+    new Date().toLocaleString('es-CL', { timeZone: 'America/Santiago' }),
+    datos.reservaId || '',
+    datos.nombre || '',
+    (datos.telefono || '').replace('+', '') || '',
+    datos.motel || '',
+    datos.tipo || '',
+    datos.fechaInicio || '',
+    datos.duracionHoras || '',
+    datos.precio ? `$${datos.precio.toLocaleString('es-CL')}` : '',
+    datos.estado || 'confirmada',
+    datos.fallback ? 'RESPALDO (Calendar falló)' : 'OK',
+    datos.googleEventId || '',
+  ];
+
+  // Reintentar hasta 3 veces con pausa entre intentos
+  for (let intento = 1; intento <= 3; intento++) {
+    try {
+      const sheets = getSheetsClient();
+      await sheets.spreadsheets.values.append({
+        spreadsheetId: SHEET_ID,
+        range: 'Reservas!A:K',
+        valueInputOption: 'RAW',
+        resource: { values: [fila] },
+      });
+      console.log(`📊 Reserva guardada en Sheets: ${datos.reservaId}`);
+      return; // Éxito, salir
+    } catch (err) {
+      console.error(`Error guardando en Sheets (intento ${intento}/3):`, err.message);
+      if (intento < 3) await new Promise(r => setTimeout(r, 2000 * intento)); // esperar 2s, 4s
+    }
   }
+  console.error(`❌ No se pudo guardar en Sheets después de 3 intentos: ${datos.reservaId}`);
 }
 
 // ── Google Calendar Auth ──────────────────────────────────────
