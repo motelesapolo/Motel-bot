@@ -46,6 +46,8 @@ const ADMIN_NUMERO = process.env.ADMIN_NUMERO || '';
 
 function setClienteWhatsApp(cliente) {
   clienteWhatsApp = cliente;
+  // Cargar bloqueos manuales persistidos
+  cargarBloqueos();
   // Cargar reservas recientes desde Sheets al iniciar
   cargarReservasDesdeSheets().then(mapa => {
     for (const [id, datos] of mapa) {
@@ -121,15 +123,22 @@ function esTarifaFinde(date) {
   const min = local.getMinutes();
   const minutosDelDia = hora * 60 + min;
   const las8am = 8 * 60;
+  const esMadrugada = minutosDelDia < las8am; // 00:00 a 07:59
 
+  // Madrugada del sábado (vie-sáb 00:00-07:59) → finde
+  if (dia === 6 && esMadrugada) return true;
+  // Sábado desde 08:00 → finde
+  if (dia === 6 && !esMadrugada) return true;
+  // Sábado completo → finde (ya cubierto arriba)
   // Viernes desde 8:00 AM → finde
   if (dia === 5 && minutosDelDia >= las8am) return true;
-  // Sábado completo → finde
-  if (dia === 6) return true;
-  // Domingo antes de las 8:00 AM → finde
-  if (dia === 0 && minutosDelDia < las8am) return true;
+  // Madrugada del domingo (sáb-dom 00:00-07:59) → finde
+  if (dia === 0 && esMadrugada) return true;
+  // Domingo antes de las 8:00 AM → finde (ya cubierto arriba)
   // Víspera de feriado desde las 8:00 AM → finde
   if (minutosDelDia >= las8am && esVisperaFeriado(date)) return true;
+  // Madrugada después de víspera de feriado → finde
+  if (esMadrugada && esVisperaFeriado(new Date(date.getTime() - 24*60*60*1000))) return true;
   return false;
 }
 
@@ -203,7 +212,12 @@ No des explicaciones largas. Concreta rápido.` : ''}
 - Si no sabes algo, ofreces transferir con un agente
 - NUNCA inventes ni supongas información que no esté en estas instrucciones. Si no sabes algo responde: "No tengo esa información, pero puedes consultarlo al ${process.env.MOTEL_TELEFONO} 😊"
 - NO uses tu conocimiento general para rellenar vacíos. Solo lo que está aquí.
-- ESTILO DE RESPUESTA: Breve y directo. SIN asteriscos ni negritas (**texto**), SIN bullets (• o -), sin listas. Máximo 2 emojis por mensaje. Sin explicaciones que el cliente no pidió. Una pregunta a la vez.
+- ESTILO DE RESPUESTA: Cálido pero conciso. Responde exactamente lo que te preguntan, con amabilidad pero sin agregar información extra que el cliente no pidió. SIN asteriscos ni negritas (**texto**), SIN bullets (• o -), sin listas. Máximo 2 emojis por mensaje. Una pregunta a la vez.
+  Ejemplos:
+  ✅ "¿Tienen estacionamiento?" → "Sí, gratuito en Marín 021 😊"
+  ❌ "¿Tienen estacionamiento?" → "Sí, el estacionamiento está en Marín 021, es privado, por orden de llegada, y si te quedas en Apolo hay un pasillo interno..."
+  ✅ "¿Cuál es la dirección?" → "Vicuña Mackenna 328, Providencia 😊"
+  ❌ "¿Cuál es la dirección?" → "Motel Apolo está en Vicuña Mackenna 328 y Le Chateau en Marín 021, ambos en Providencia cerca del metro..."
 - RESUMEN DE RESERVA: incluir toda la info relevante pero sin asteriscos, sin bullets, sin negritas. Formato limpio:
 
 Reserva confirmada ✅
@@ -243,8 +257,8 @@ Dirección: Marín 021, Providencia, Santiago
 Teléfono: ${process.env.MOTEL_TELEFONO} | Horario: 24/7 todos los días incluyendo feriados
 
 IMPORTANTE SOBRE EL ACCESO:
-- El estacionamiento está en Marín 021 (Motel Le Chateau), es gratis para clientes, privado y por orden de llegada (NO se puede reservar)
-- Si te quedas en Motel Apolo y llegas al estacionamiento de Marín 021, el ingreso a Apolo es por dentro de Le Chateau — hay un pasillo interno que une ambos moteles
+- El estacionamiento está en Marín 021, es gratis para clientes de ambos moteles, privado y por orden de llegada (NO se puede reservar)
+- Solo mencionar el pasillo interno entre Apolo y Le Chateau si el cliente pregunta específicamente cómo llegar desde el estacionamiento a Apolo
 - No es necesario llegar en auto, se puede llegar a pie perfectamente
 - Los clientes NO llegan directo a las habitaciones, los recibe recepción
 - Metros más cercanos: Metro Santa Isabel y Metro Parque Bustamante. Si preguntan a cuánto están, decir que aproximadamente 5 minutos caminando.
@@ -499,9 +513,11 @@ ${!esSinAgente() ?
 5. Preguntar fecha y hora de llegada
    - Si el cliente menciona una hora SIN AM/PM ni formato 24h (ej: "las 10", "las 11"), SIEMPRE preguntar: "¿Esa hora es AM o PM?" — NUNCA asumir
    - Si dice "22:00", "23:00" u otro formato 24h claro, no preguntar
+   - LÓGICA DE MADRUGADA: Si el cliente pide una hora entre 00:00 y 07:59 y dice "hoy" o no especifica fecha, asumir que es la madrugada del día SIGUIENTE (ej: si hoy es viernes y pide las 00:30, la reserva es para el sábado a las 00:30, no el viernes). Confirmar siempre la fecha exacta al cliente antes de crear la reserva.
+   - Si la hora pedida ya pasó hoy, asumir que es para mañana.
 6. Asumir que son 2 personas. NO preguntar cuántas personas. Solo mencionar precio para 3 si preguntan explícitamente.
 7. Verificar disponibilidad
-8. Pedir nombre completo del cliente (nombre y apellido)
+8. Pedir nombre completo del cliente (nombre y apellido) — OBLIGATORIO. NUNCA crear la reserva sin tener el nombre completo del cliente.
 9. Confirmar datos completos con precio correcto
 10. Crear reserva y entregar el N° de reserva de 6 dígitos (NO mencionar número de habitación - se asigna al llegar)
 
@@ -545,9 +561,12 @@ REGLAS:
 - No expliques al cliente los detalles de cuándo cambia la tarifa, solo indica el precio correcto
 - SIEMPRE manda la fecha completa con hora en fechaInicio (ej: "2026-04-20T23:00:00"), NUNCA solo la fecha sin hora
 - NUNCA confirmes una reserva ni entregues un número de reserva sin antes ejecutar [ACCION:crear_reserva]. El número lo entrega el sistema en RESULTADO_RESERVA, no lo inventes.
-- NUNCA digas "procedo a crear tu reserva", "voy a crear tu reserva" o similares sin incluir [ACCION:crear_reserva] en el mismo mensaje. Si tienes todos los datos, ejecuta la acción directamente sin anunciarlo.
+- NUNCA digas "procedo a crear tu reserva", "voy a crear tu reserva" o similares sin incluir [ACCION:crear_reserva] en el mismo mensaje.
+- Al informar el precio al cliente SIEMPRE usar el precio correcto según la fecha: semana (dom 8AM - vie 7:59AM) o fin de semana (vie 8AM - dom 7:59AM). El sistema calculará el precio final, pero el precio que le muestras al cliente debe ser correcto. Si tienes todos los datos, ejecuta la acción directamente sin anunciarlo.
 - NUNCA digas "tu reserva ha sido modificada", "el cambio fue exitoso" o similares sin haber ejecutado [ACCION:crear_reserva] con esModificacion: true en el mismo mensaje. Si tienes todos los datos para modificar, ejecuta la acción directamente.
+- Cuando el cliente confirma ("si", "ok", "dale", "perfecto", "de acuerdo", "excelente") y ya tienes nombre, motel, tipo, fecha y hora → ejecutar [ACCION:crear_reserva] INMEDIATAMENTE en ese mismo mensaje. No hacer más preguntas ni decir "perfecto" sin ejecutar la acción.
 - Si el sistema responde RESERVA_YA_CREADA: significa que ya se creó una reserva en esta conversación. NO crear otra. Responder con la confirmación de la reserva existente usando el ID que retorna.
+- Si el sistema responde BLOQUEADO_MANUALMENTE: no hay disponibilidad de ese tipo de habitación en este momento. Informar al cliente y ofrecer otras opciones disponibles.
 - No hay restricción de horario general — se puede reservar a cualquier hora
 
 - Si no hay disponibilidad, ofrece el otro motel o un horario alternativo`;
@@ -643,10 +662,24 @@ async function notificarEmpresa(datos, result, tipo, precio, duracionHoras, tele
 async function procesarAccion(accion, datos, telefono) {
   switch (accion) {
     case 'verificar_disponibilidad': {
+      // Verificar bloqueos manuales primero
+      const motelCheck = (datos.motel || '').toLowerCase().includes('chateau') ? 'chateau' : 'apolo';
+      const tipoCheck = (datos.tipo || '').toLowerCase().includes('jacuzzi') ? 'jacuzzi' :
+                        (datos.tipo || '').toLowerCase().includes('vip') ? 'vip' : 'simple';
+      if (bloqueosManuales.get(`${motelCheck}_${tipoCheck}`)) {
+        return `RESULTADO_DISPONIBILIDAD: {"disponibles":0,"ocupadas":0,"total":0,"hayDisponibilidad":false,"bloqueadoManualmente":true}`;
+      }
       const result = await consultarDisponibilidad(datos.fechaInicio, datos.duracionHoras || 3, datos.motel || '', datos.tipo || '');
       return `RESULTADO_DISPONIBILIDAD: ${JSON.stringify(result)}`;
     }
     case 'crear_reserva': {
+      // Verificar bloqueos manuales antes de crear
+      const motelBlq = (datos.motel || '').toLowerCase().includes('chateau') ? 'chateau' : 'apolo';
+      const tipoBlq = (datos.tipo || '').toLowerCase().includes('jacuzzi') ? 'jacuzzi' :
+                      (datos.tipo || '').toLowerCase().includes('vip') ? 'vip' : 'simple';
+      if (bloqueosManuales.get(`${motelBlq}_${tipoBlq}`)) {
+        return `RESULTADO_RESERVA: {"ok": false, "error": "BLOQUEADO_MANUALMENTE", "mensaje": "No hay disponibilidad en este momento para ese tipo de habitación"}`;
+      }
       // Evitar crear reserva duplicada si ya se creó una en esta conversación recientemente
       const reservaReciente = reservasEnProgreso.get(telefono);
       if (reservaReciente && !datos.esModificacion) {
@@ -1041,12 +1074,34 @@ setInterval(() => {
   }
 }, 60 * 60 * 1000);
 
+const fs_bloqueos = require('fs');
+const BLOQUEOS_FILE = '/tmp/bloqueos.json';
+
+function guardarBloqueos() {
+  try {
+    const obj = {};
+    for (const [k, v] of bloqueosManuales) obj[k] = v;
+    fs_bloqueos.writeFileSync(BLOQUEOS_FILE, JSON.stringify(obj));
+  } catch (e) { console.error('Error guardando bloqueos:', e.message); }
+}
+
+function cargarBloqueos() {
+  try {
+    if (fs_bloqueos.existsSync(BLOQUEOS_FILE)) {
+      const obj = JSON.parse(fs_bloqueos.readFileSync(BLOQUEOS_FILE, 'utf8'));
+      for (const [k, v] of Object.entries(obj)) bloqueosManuales.set(k, v);
+      console.log(`🔒 Bloqueos cargados: ${bloqueosManuales.size}`);
+    }
+  } catch (e) { console.error('Error cargando bloqueos:', e.message); }
+}
+
 function bloquearHabitacion(motel, tipo) {
   const moteles = motel === 'todo' ? ['apolo', 'chateau'] : [motel];
   const tipos = tipo ? [tipo] : ['simple', 'vip', 'jacuzzi'];
   for (const m of moteles)
     for (const t of tipos)
       bloqueosManuales.set(`${m}_${t}`, true);
+  guardarBloqueos();
 }
 
 function liberarHabitacion(motel, tipo) {
@@ -1055,6 +1110,7 @@ function liberarHabitacion(motel, tipo) {
   for (const m of moteles)
     for (const t of tipos)
       bloqueosManuales.delete(`${m}_${t}`);
+  guardarBloqueos();
 }
 
 function getEstadoBloqueos() {
