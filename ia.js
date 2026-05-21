@@ -119,26 +119,21 @@ function esVisperaFeriado(date) {
 function esTarifaFinde(date) {
   const local = new Date(date.toLocaleString('en-US', { timeZone: 'America/Santiago' }));
   const dia = local.getDay();    // 0=dom, 1=lun, 2=mar, 3=mié, 4=jue, 5=vie, 6=sáb
-  const hora = local.getHours();
-  const min = local.getMinutes();
-  const minutosDelDia = hora * 60 + min;
+  const minutosDelDia = local.getHours() * 60 + local.getMinutes();
   const las8am = 8 * 60;
   const esMadrugada = minutosDelDia < las8am; // 00:00 a 07:59
 
-  // Madrugada del sábado (vie-sáb 00:00-07:59) → finde
-  if (dia === 6 && esMadrugada) return true;
-  // Sábado desde 08:00 → finde
-  if (dia === 6 && !esMadrugada) return true;
-  // Sábado completo → finde (ya cubierto arriba)
+  // Sábado completo → finde
+  if (dia === 6) return true;
   // Viernes desde 8:00 AM → finde
   if (dia === 5 && minutosDelDia >= las8am) return true;
-  // Madrugada del domingo (sáb-dom 00:00-07:59) → finde
+  // Madrugada del domingo (continuación del sábado) → finde
   if (dia === 0 && esMadrugada) return true;
-  // Domingo antes de las 8:00 AM → finde (ya cubierto arriba)
-  // Víspera de feriado desde las 8:00 AM → finde
+  // Víspera de feriado desde las 8:00 AM → finde (cualquier día)
   if (minutosDelDia >= las8am && esVisperaFeriado(date)) return true;
-  // Madrugada después de víspera de feriado → finde
-  if (esMadrugada && esVisperaFeriado(new Date(date.getTime() - 24*60*60*1000))) return true;
+  // Madrugada del feriado (continuación de la víspera) → finde
+  const ayer = new Date(date.getTime() - 24*60*60*1000);
+  if (esMadrugada && esVisperaFeriado(ayer)) return true;
   return false;
 }
 
@@ -369,8 +364,8 @@ CAPACIDAD DE HABITACIONES:
 HORARIOS DE ESTADÍA:
 - VALOR NOCHE (22:00 a 12:00): crear reserva directamente. Salida siempre a las 12:00.
 - VALOR NOCHE desde 21:30 hasta 21:59: aceptar y crear directamente. Salida a las 12:00.
-- VALOR NOCHE desde 21:00 hasta 21:29: el sistema devolverá NOCHE_SUGERIR_EXTRAS. Responder solo si el cliente pregunta: "Puedes llegar a las 21:00 con 1 hora extra y comenzar la noche a las 22:00 😊" Solo mencionarlo si el cliente lo pregunta.
-- VALOR NOCHE desde 20:00 hasta 20:59: el sistema devolverá NOCHE_SUGERIR_EXTRAS. Responder solo si el cliente pregunta: "Puedes llegar a las 20:00 con 2 horas extras y comenzar la noche a las 22:00 😊" Solo mencionarlo si el cliente lo pregunta.
+- VALOR NOCHE desde 21:00 hasta 21:29: el sistema devolverá NOCHE_SUGERIR_EXTRAS. Ofrecer SIEMPRE automáticamente: "Puedes llegar a las 21:00 con 1 hora extra ($5.000 Simple / $6.000 VIP / $7.000 Jacuzzi) y comenzar la noche a las 22:00. ¿Te parece bien?"
+- VALOR NOCHE desde 20:00 hasta 20:59: el sistema devolverá NOCHE_SUGERIR_EXTRAS. Ofrecer SIEMPRE automáticamente: "Puedes llegar a las 20:00 con 2 horas extras ($10.000 Simple / $12.000 VIP / $14.000 Jacuzzi) y comenzar la noche a las 22:00. ¿Te parece bien?"
 - VALOR NOCHE entre 13:00 y 19:59: el sistema devolverá NOCHE_HORA_INVALIDA. Responder: "El horario de noche parte a las 22:00. ¿Te acomoda llegar a esa hora o prefieres 3h, la promo 6x3 o 12 horas?"
 - VALOR NOCHE desde 01:00 hasta 12:00: sugerir 12 horas porque le conviene más. Si insiste en noche, crear igual.
 - 12 HORAS: 12 horas corridas desde cualquier hora. Solo mencionar si el cliente pregunta.
@@ -562,7 +557,11 @@ REGLAS:
 - SIEMPRE manda la fecha completa con hora en fechaInicio (ej: "2026-04-20T23:00:00"), NUNCA solo la fecha sin hora
 - NUNCA confirmes una reserva ni entregues un número de reserva sin antes ejecutar [ACCION:crear_reserva]. El número lo entrega el sistema en RESULTADO_RESERVA, no lo inventes.
 - NUNCA digas "procedo a crear tu reserva", "voy a crear tu reserva" o similares sin incluir [ACCION:crear_reserva] en el mismo mensaje.
-- Al informar el precio al cliente SIEMPRE usar el precio correcto según la fecha: semana (dom 8AM - vie 7:59AM) o fin de semana (vie 8AM - dom 7:59AM). El sistema calculará el precio final, pero el precio que le muestras al cliente debe ser correcto. Si tienes todos los datos, ejecuta la acción directamente sin anunciarlo.
+- Al informar el precio al cliente SIEMPRE usar el precio correcto según la fecha: semana (dom 8AM - vie 7:59AM) o fin de semana (vie 8AM - dom 7:59AM). El sistema calculará el precio final, pero el precio que le muestras al cliente debe ser correcto.
+- VÍSPERA DE FERIADO: el día anterior a un feriado desde las 8AM se cobra como fin de semana. Ejemplo: si el feriado es el jueves 21, el miércoles 20 desde las 8AM es tarifa finde.
+- MADRUGADA DE VÍSPERA: si la reserva es para la madrugada (00:00 a 07:59) del día feriado, también es tarifa finde porque es continuación de la víspera. Ejemplo: jueves 21 a la 01:00 AM → tarifa finde $29.000 (no $27.000).
+- El feriado mismo desde las 8AM → semana (a menos que caiga viernes o sábado).
+- En caso de duda sobre si es semana o finde, usar SIEMPRE tarifa finde para no cobrar de menos. Si tienes todos los datos, ejecuta la acción directamente sin anunciarlo.
 - NUNCA digas "tu reserva ha sido modificada", "el cambio fue exitoso" o similares sin haber ejecutado [ACCION:crear_reserva] con esModificacion: true en el mismo mensaje. Si tienes todos los datos para modificar, ejecuta la acción directamente.
 - Cuando el cliente confirma ("si", "ok", "dale", "perfecto", "de acuerdo", "excelente") y ya tienes nombre, motel, tipo, fecha y hora → ejecutar [ACCION:crear_reserva] INMEDIATAMENTE en ese mismo mensaje. No hacer más preguntas ni decir "perfecto" sin ejecutar la acción.
 - Si el sistema responde RESERVA_YA_CREADA: significa que ya se creó una reserva en esta conversación. NO crear otra. Responder con la confirmación de la reserva existente usando el ID que retorna.
