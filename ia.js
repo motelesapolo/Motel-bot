@@ -234,9 +234,10 @@ PRIORIDAD EN CADA CONVERSACIÓN:
 
 VENTAS (sin hostigar):
 - Si el cliente pregunta precios → responde el precio, NO preguntes si quiere reservar a menos que muestre intención clara
-- Si el cliente pregunta por precios o tarifas y NO ha recibido la foto aún → usar acción enviar_tarifas
+- Si el cliente pregunta por precios, tarifas o tipos de habitación → usar acción enviar_tarifas INMEDIATAMENTE, sin preguntar si quiere verlos
 - Si el cliente pregunta por precio de una habitación específica y YA recibió la foto → responder haciendo referencia a la foto anterior: "En la imagen que te mandé antes están todos los precios, incluyendo el de [tipo]"
 - NO escribir los precios en texto, siempre referirse a la imagen
+- NUNCA preguntar "¿Te gustaría que te muestre los precios?" — simplemente mandarlos
 - Ejemplo primera vez: [ACCION:enviar_tarifas]{}[/ACCION]
 - Si muestra intención de reservar → avanza directo al cierre sin rodeos
 - Si duda entre opciones → sugiere una concreta, no preguntes si quiere reservar
@@ -797,6 +798,10 @@ Datos: ${datos.motel} | ${tipoLabel} | ${datos.fechaInicio} | $${precio.toLocale
       return `RESULTADO_CANCELACION: ${JSON.stringify(result)}`;
     }
     case 'enviar_tarifas': {
+      // Si ya se enviaron las tarifas en esta conversación, no mandar de nuevo
+      if (tarifasEnviadas.has(telefono)) {
+        return 'RESULTADO_TARIFAS: {"ok": false, "yaEnviado": true}';
+      }
       return 'RESULTADO_TARIFAS: {"ok": true}';
     }
 
@@ -978,7 +983,7 @@ async function procesarMensaje(telefono, mensajeUsuario, numeroPrueba = null) {
       console.log(`🔧 Acciones detectadas:`, textoRespuesta.match(/\[ACCION:(\w+)\]/g));
       const resultados = await ejecutarAccionesIA(textoRespuesta, telefono);
       console.log(`🔧 Resultado acciones:`, resultados.substring(0, 200));
-      // Capturar tarifas si hay
+      // Capturar tarifas si hay (solo si no se han enviado ya)
       if (resultados.includes('RESULTADO_TARIFAS')) {
         fotosParaEnviar = { tarifas: true };
       } else {
