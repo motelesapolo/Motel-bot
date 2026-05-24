@@ -36,6 +36,7 @@ const reservasEnProgreso = new Map();
 const reservasConfirmadas = new Map();   // { id, googleEventId } por reservaId
 const bloqueosManuales = new Map();      // 'motel_tipo' → true (bloqueado manualmente)
 const tarifasEnviadas = new Set();       // teléfonos que ya recibieron la foto de tarifas
+const disponibilidadConfirmada = new Map(); // telefono → {motel, tipo, fecha} disponibilidad ya confirmada
 const clientesEsperandoAgente = new Set();
 const preferenciaCliente = new Map();    // último tipo hab reservado por teléfono
 const ultimoMensaje = new Map();         // último mensaje para detectar repetición
@@ -220,12 +221,14 @@ No des explicaciones largas. Concreta rápido.` : ''}
 - RESUMEN DE RESERVA: incluir toda la info relevante pero sin asteriscos, sin bullets, sin negritas. Formato limpio:
 
 Reserva confirmada ✅
-N° [ID] — [Nombre]
-[Motel] | [Tipo] | [Fecha] [Hora]
-$[Precio] — pago al llegar (efectivo, débito o crédito)
+N° NÚMERO_RESERVA — NOMBRE_CLIENTE
+MOTEL | TIPO | FECHA HORA
+$PRECIO — pago al llegar (efectivo, débito o crédito)
 Estacionamiento gratuito en Marín 021
 La propina es voluntaria 😊
 Tu reserva se mantendrá disponible hasta 45 minutos después de la hora acordada.
+
+IMPORTANTE: Los valores en MAYÚSCULAS (NÚMERO_RESERVA, NOMBRE_CLIENTE, etc.) deben ser reemplazados con los datos reales del RESULTADO_RESERVA. NUNCA enviar este formato con las palabras en mayúsculas sin reemplazar.
 
 PRIORIDAD EN CADA CONVERSACIÓN:
 1. Resolver lo que el cliente pregunta
@@ -364,6 +367,8 @@ CAPACIDAD DE HABITACIONES:
 - Motel Apolo: Simple 6 | VIP 3 | Jacuzzi 2
 - Motel Le Chateau: Simple 7 | VIP 5 | Jacuzzi 2
 - Si no hay disponibilidad para el tipo/motel solicitado, ofrecer el otro motel o un horario diferente
+- NUNCA decir que hay disponibilidad sin haber ejecutado [ACCION:verificar_disponibilidad] primero. No inventar horarios disponibles.
+- Si el cliente pregunta si hay disponibilidad en otro horario, ejecutar [ACCION:verificar_disponibilidad] con ese horario antes de responder
 - Si tampoco hay disponibilidad en el otro motel, decir: "Lo sentimos, no tenemos disponibilidad para ese horario. Te invitamos a llamarnos directamente al ${process.env.MOTEL_TELEFONO} (Apolo anexo 710 / Le Chateau anexo 210) para revisar opciones o hablar con un agente."
 
 HORARIOS DE ESTADÍA:
@@ -676,6 +681,12 @@ async function procesarAccion(accion, datos, telefono) {
         return `RESULTADO_DISPONIBILIDAD: {"disponibles":0,"ocupadas":0,"total":0,"hayDisponibilidad":false,"bloqueadoManualmente":true}`;
       }
       const result = await consultarDisponibilidad(datos.fechaInicio, datos.duracionHoras || 3, datos.motel || '', datos.tipo || '');
+      // Guardar disponibilidad confirmada para no volver a verificar
+      if (result.hayDisponibilidad) {
+        disponibilidadConfirmada.set(telefono, {
+          motel: datos.motel, tipo: datos.tipo, fecha: datos.fechaInicio
+        });
+      }
       return `RESULTADO_DISPONIBILIDAD: ${JSON.stringify(result)}`;
     }
     case 'crear_reserva': {
@@ -685,6 +696,15 @@ async function procesarAccion(accion, datos, telefono) {
                       (datos.tipo || '').toLowerCase().includes('vip') ? 'vip' : 'simple';
       if (bloqueosManuales.get(`${motelBlq}_${tipoBlq}`)) {
         return `RESULTADO_RESERVA: {"ok": false, "error": "BLOQUEADO_MANUALMENTE", "mensaje": "No hay disponibilidad en este momento para ese tipo de habitación"}`;
+      }
+      // Si ya se confirmó disponibilidad para este cliente, confiar en eso y no reverificar
+      const dispConfirmada = disponibilidadConfirmada.get(telefono);
+      if (!dispConfirmada) {
+        // No se verificó disponibilidad antes — verificar ahora
+        const dispCheck = await consultarDisponibilidad(datos.fechaInicio, datos.duracionHoras || 3, datos.motel || '', datos.tipo || '');
+        if (!dispCheck.hayDisponibilidad) {
+          return `RESULTADO_RESERVA: {"ok": false, "error": "Sin disponibilidad en ese horario"}`;
+        }
       }
       // Evitar crear reserva duplicada si ya se creó una en esta conversación recientemente
       const reservaReciente = reservasEnProgreso.get(telefono);
@@ -1074,6 +1094,8 @@ function limpiarConversacion(telefono) {
   clientesEsperandoAgente.delete(telefono);
   ultimoMensaje.delete(telefono);
   ultimaActividad.delete(telefono);
+  tarifasEnviadas.delete(telefono);
+  disponibilidadConfirmada.delete(telefono);
 }
 
 

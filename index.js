@@ -116,9 +116,11 @@ cliente.on('message', async (mensaje) => {
 
   const rawFrom = mensaje.from || '';
   let telefono = rawFrom.replace('@c.us', '').replace('@lid', '');
-  // Ignorar mensajes del número del motel
+  // Ignorar mensajes del número del motel (número normal y todos sus posibles LIDs)
   const NUMERO_MOTEL = (process.env.EMPRESA_NUMERO || '56945676410');
-  if (telefono === NUMERO_MOTEL) return;
+  const LIDS_MOTEL = ['160009157619778'];
+  if (telefono === NUMERO_MOTEL || LIDS_MOTEL.includes(telefono)) return;
+  if (rawFrom.includes('160009157619778') || rawFrom.includes(NUMERO_MOTEL)) return;
   // Mapear LIDs conocidos al número real
   const LID_MAP = { '202902928908358': '56991655665', '217274023702535': process.env.ADMIN_NUMERO || '56949716039' };
   if (LID_MAP[telefono]) telefono = LID_MAP[telefono];
@@ -270,8 +272,11 @@ Usa /libre para reactivar.`);
   // Tomar todos los mensajes acumulados y unirlos
   const pendientes = mensajesPendientes.get(telefono) || [];
   mensajesPendientes.delete(telefono);
+  // Si hay más de un mensaje acumulado, procesar solo el primero
+  // para evitar que preguntas posteriores se mezclen con confirmaciones de reserva
+  // Unir todos los mensajes acumulados en uno solo para que la IA tenga todo el contexto
   const textoFinal = pendientes.join(' ');
-  if (textoFinal !== texto && pendientes.length > 1) {
+  if (pendientes.length > 1) {
     console.log(`📨 Mensajes acumulados de ${telefono}: "${textoFinal}"`);
   }
 
