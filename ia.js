@@ -937,6 +937,8 @@ async function procesarMensaje(telefono, mensajeUsuario, numeroPrueba = null) {
   if (ultimaAct && (ahoraTs - ultimaAct) > 120 * 60 * 1000) {
     conversaciones.delete(telefono);
     reservasEnProgreso.delete(telefono);
+    tarifasEnviadas.delete(telefono);
+    disponibilidadConfirmada.delete(telefono);
     console.log(`⏰ Conversación de ${telefono} limpiada por inactividad`);
   }
   ultimaActividad.set(telefono, ahoraTs);
