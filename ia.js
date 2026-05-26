@@ -37,6 +37,7 @@ const reservasConfirmadas = new Map();   // { id, googleEventId } por reservaId
 const bloqueosManuales = new Map();      // 'motel_tipo' → true (bloqueado manualmente)
 const tarifasEnviadas = new Set();       // teléfonos que ya recibieron la foto de tarifas
 const disponibilidadConfirmada = new Map(); // telefono → {motel, tipo, fecha} disponibilidad ya confirmada
+const confirmacionesPendientes = new Map(); // telefono → número de veces que se ha pedido confirmación
 const clientesEsperandoAgente = new Set();
 const preferenciaCliente = new Map();    // último tipo hab reservado por teléfono
 const ultimoMensaje = new Map();         // último mensaje para detectar repetición
@@ -579,7 +580,9 @@ REGLAS:
 - El feriado mismo desde las 8AM → semana (a menos que caiga viernes o sábado).
 - En caso de duda sobre si es semana o finde, usar SIEMPRE tarifa finde para no cobrar de menos. Si tienes todos los datos, ejecuta la acción directamente sin anunciarlo.
 - NUNCA digas "tu reserva ha sido modificada", "el cambio fue exitoso" o similares sin haber ejecutado [ACCION:crear_reserva] con esModificacion: true en el mismo mensaje. Si tienes todos los datos para modificar, ejecuta la acción directamente.
-- Cuando el cliente confirma ("si", "ok", "dale", "perfecto", "de acuerdo", "excelente") y ya tienes nombre, motel, tipo, fecha y hora → ejecutar [ACCION:crear_reserva] INMEDIATAMENTE en ese mismo mensaje. No hacer más preguntas ni decir "perfecto" sin ejecutar la acción.
+- Cuando el cliente confirma ("si", "ok", "dale", "perfecto", "de acuerdo", "excelente", "super", "correcto", "muchas gracias", "claro", "va", "listo", "confirmo") y ya tienes nombre, motel, tipo, fecha y hora → ejecutar [ACCION:crear_reserva] INMEDIATAMENTE. NUNCA volver a pedir confirmación si el cliente ya confirmó.
+- Si el cliente ya confirmó una vez y vuelves a preguntar si confirma → estás en un loop. PARA el loop ejecutando [ACCION:crear_reserva] de inmediato.
+- MÁXIMO UNA VEZ puedes pedir confirmación. Si el cliente responde cualquier cosa afirmativa, crear la reserva sin más preguntas.
 - Si el sistema responde RESERVA_YA_CREADA: significa que ya se creó una reserva en esta conversación. NO crear otra. Responder con la confirmación de la reserva existente usando el ID que retorna.
 - Si el sistema responde BLOQUEADO_MANUALMENTE: no hay disponibilidad de ese tipo de habitación en este momento. Informar al cliente y ofrecer otras opciones disponibles.
 - No hay restricción de horario general — se puede reservar a cualquier hora
@@ -748,12 +751,10 @@ async function procesarAccion(accion, datos, telefono) {
       }
 
       // Corregir tipo automáticamente según fecha real Santiago
-      // Fix zona horaria cruce medianoche: convertir siempre a hora local Santiago
       let tipo = datos.tipo || 'simple_3h_semana';
-      // Usar parsearFechaSantiago para evitar desfase de timezone
       const fechaLlegada = parsearFechaSantiago(datos.fechaInicio);
-      const fechaLlegadaLocal = new Date(fechaLlegada.toLocaleString('en-US', { timeZone: 'America/Santiago' }));
-      const deberiaSerFinde = esTarifaFinde(fechaLlegadaLocal);
+      // Pasar fecha directamente a esTarifaFinde — no convertir a local primero
+      const deberiaSerFinde = esTarifaFinde(fechaLlegada);
       if (!tipo.endsWith('_24h')) {
         // Normalizar: asegurar que tenga sufijo _semana o _finde
         if (!tipo.endsWith('_semana') && !tipo.endsWith('_finde')) {
@@ -943,6 +944,7 @@ async function procesarMensaje(telefono, mensajeUsuario, numeroPrueba = null) {
     reservasEnProgreso.delete(telefono);
     tarifasEnviadas.delete(telefono);
     disponibilidadConfirmada.delete(telefono);
+    confirmacionesPendientes.delete(telefono);
     console.log(`⏰ Conversación de ${telefono} limpiada por inactividad`);
   }
   ultimaActividad.set(telefono, ahoraTs);
@@ -951,6 +953,21 @@ async function procesarMensaje(telefono, mensajeUsuario, numeroPrueba = null) {
   const msgNormalizado = mensajeUsuario.trim().toLowerCase();
   const esRepetido = ultimoMensaje.get(telefono) === msgNormalizado;
   ultimoMensaje.set(telefono, msgNormalizado);
+
+  // Detectar palabras de confirmación para anti-loop
+  const PALABRAS_CONFIRMACION = ['si','sí','ok','dale','perfecto','de acuerdo','excelente','super','correcto','claro','va','listo','confirmo','confirmado','esta bien','está bien'];
+  const msgLowerConfirm = msgNormalizado.toLowerCase().trim().replace(/[!¡.]/g,'');
+  const esConfirmacion = PALABRAS_CONFIRMACION.some(p => msgLowerConfirm === p || msgLowerConfirm.includes(p));
+  if (esConfirmacion) {
+    const veces = (confirmacionesPendientes.get(telefono) || 0) + 1;
+    confirmacionesPendientes.set(telefono, veces);
+    if (veces >= 2) {
+      // Cliente confirmó 2+ veces → agregar nota para forzar creación
+      mensajeUsuario = mensajeUsuario + ' [SISTEMA: El cliente ya confirmó varias veces. Ejecutar crear_reserva AHORA sin más preguntas.]';
+    }
+  } else {
+    confirmacionesPendientes.delete(telefono);
+  }
 
   // Si el cliente se despide y el bot ya se despidió antes, no responder
   const despedidas = ['hasta pronto', 'adios', 'adiós', 'chao', 'chau', 'bye', 'hasta luego', 'ok chao', 'ok bye', 'ya chao', 'chao entonces', 'hasta'];
@@ -1102,6 +1119,7 @@ function limpiarConversacion(telefono) {
   ultimaActividad.delete(telefono);
   tarifasEnviadas.delete(telefono);
   disponibilidadConfirmada.delete(telefono);
+  confirmacionesPendientes.delete(telefono);
 }
 
 
