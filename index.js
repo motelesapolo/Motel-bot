@@ -116,9 +116,11 @@ cliente.on('message', async (mensaje) => {
 
   const rawFrom = mensaje.from || '';
   let telefono = rawFrom.replace('@c.us', '').replace('@lid', '');
-  // Ignorar mensajes del número del motel
+  // Ignorar mensajes del número del motel (número normal y LID)
   const NUMERO_MOTEL = (process.env.EMPRESA_NUMERO || '56945676410');
-  if (telefono === NUMERO_MOTEL) return;
+  const LIDS_MOTEL = ['160009157619778'];
+  if (telefono === NUMERO_MOTEL || LIDS_MOTEL.includes(telefono)) return;
+  if (rawFrom.includes('160009157619778') || rawFrom.includes(NUMERO_MOTEL)) return;
   // Mapear LIDs conocidos al número real
   const LID_MAP = { '202902928908358': '56991655665', '217274023702535': process.env.ADMIN_NUMERO || '56949716039' };
   if (LID_MAP[telefono]) telefono = LID_MAP[telefono];
@@ -361,12 +363,8 @@ Usa /libre para reactivar.`);
         }
       };
 
-      // Enviar texto primero
-      if (textoRespuesta) await cliente.sendMessage(chatId, textoRespuesta);
-
-      // Procesar fotos — simple, múltiples o ambos moteles
+      // Procesar fotos primero — sin texto entremedio
       if (fotos.multiple && fotos.lista) {
-        // Múltiples grupos de fotos (ej: simple + vip)
         for (const bloque of fotos.lista) {
           await procesarBloqueForotos(bloque);
           await new Promise(r => setTimeout(r, 800));
@@ -375,6 +373,12 @@ Usa /libre para reactivar.`);
       } else {
         await procesarBloqueForotos(fotos);
         console.log(`📸 Fotos enviadas a ${telefono}`);
+      }
+
+      // Texto adicional después de las fotos con pausa
+      if (textoRespuesta && textoRespuesta.trim()) {
+        await new Promise(r => setTimeout(r, 1500));
+        await cliente.sendMessage(chatId, textoRespuesta);
       }
 
       await chat.clearState();
