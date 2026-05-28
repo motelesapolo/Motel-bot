@@ -458,7 +458,10 @@ LLEGADA TARDE: Si un cliente dice que llegará más tarde de la hora reservada:
 3. Confirmar al cliente que se actualizó su reserva y el nuevo número
 
 NÚMERO DE HABITACIÓN: No se asigna número de habitación al momento de la reserva. El número se asigna al llegar a recepción según disponibilidad.
-- Si el cliente pregunta explícitamente por una habitación específica (ej: "quiero la habitación 5", "¿está disponible la número 3?"), responde: "Con gusto te ayudo con eso, un ejecutivo te atenderá en breve 😊" y usa [TRANSFERIR_AGENTE].
+- HABITACIÓN ESPECÍFICA: Si el cliente pide una habitación específica (por número, color, característica visual o referencia directa como "la verde", "la 5", "esa misma", "la que siempre pido", "esa quiero", "esa me gusta", reply a foto con intención de reservar), aplicar esta lógica según la hora ACTUAL en Santiago (no la hora que quiere llegar):
+  * 9:00 AM a 22:59 PM → responder: "Con gusto te ayudo, un ejecutivo te atenderá en breve 😊" y usar [TRANSFERIR_AGENTE]
+  * 23:00 PM a 8:59 AM → responder: "En este horario las habitaciones se asignan por orden de llegada. Te esperamos 😊" — NO usar [TRANSFERIR_AGENTE]
+- Esta regla aplica SOLO cuando piden una habitación ESPECÍFICA. Si piden un tipo ("quiero jacuzzi", "una VIP") seguir el flujo normal de reserva.
 - Solo transferir si el cliente lo pide EXPLÍCITAMENTE. No mencionarlo de forma proactiva.
 
 
@@ -617,14 +620,12 @@ const DURACIONES = {
 
 // ── Notificar al admin ────────────────────────────────────────
 async function notificarAdmin(telefono, mensaje, motivo) {
-  if (!clienteWhatsApp || !ADMIN_NUMERO) return;
+  if (!clienteWhatsApp) return;
   try {
-    const chatId = `${ADMIN_NUMERO}@c.us`;
     const numeroLegible = telefono.startsWith('56') ? `+${telefono}` : `+56${telefono}`;
     const texto = [
       `⚠️ *ATENCIÓN REQUERIDA*`,
-      ``,
-
+      `📱 Cliente: ${numeroLegible}`,
       `💬 Motivo: ${motivo}`,
       `📝 Último mensaje: "${mensaje}"`,
       ``,
@@ -632,10 +633,20 @@ async function notificarAdmin(telefono, mensaje, motivo) {
       `Cuando termines de atenderlo, escribe:`,
       `/activar_cliente ${telefono}`,
     ].join('\n');
-    await clienteWhatsApp.sendMessage(chatId, texto);
-    console.log(`📨 Admin notificado sobre cliente ${telefono}`);
+    // Notificar a todos los admins
+    const adminsNotificar = [
+      process.env.ADMIN_NUMERO,
+      '56991655665',
+      '56999644093',
+    ].filter(Boolean);
+    for (const admin of adminsNotificar) {
+      try {
+        await clienteWhatsApp.sendMessage(`${admin}@c.us`, texto);
+      } catch (e) { console.error(`Error notificando a ${admin}:`, e.message); }
+    }
+    console.log(`📨 Admins notificados sobre cliente ${telefono}`);
   } catch (err) {
-    console.error('Error notificando admin:', err.message);
+    console.error('Error notificando admins:', err.message);
   }
 }
 
@@ -1076,7 +1087,12 @@ Te esperamos. El pago es en recepción al llegar.`;
     // Verificar si se debe transferir a agente
     if (textoRespuesta.includes('[TRANSFERIR_AGENTE]')) {
       clientesEsperandoAgente.add(telefono);
-      await notificarAdmin(telefono, mensajeUsuario, 'El cliente solicitó hablar con un agente o el bot no pudo responder');
+      // Detectar si es por habitación específica
+      const esHabEspecifica = mensajeUsuario.toLowerCase().match(/la \d+|habitaci[oó]n \d+|la verde|la roja|la misma|esa misma|siempre pido|esa quiero|esa me gusta/);
+      const motivoTransferencia = esHabEspecifica 
+        ? '🏨 Cliente pide habitación específica — requiere atención manual'
+        : 'El cliente solicitó hablar con un agente';
+      await notificarAdmin(telefono, mensajeUsuario, motivoTransferencia);
     }
 
     const respuestaLimpia = limpiarRespuesta(textoRespuesta);
