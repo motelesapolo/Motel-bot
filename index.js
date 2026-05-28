@@ -118,9 +118,8 @@ cliente.on('message', async (mensaje) => {
   let telefono = rawFrom.replace('@c.us', '').replace('@lid', '');
   // Ignorar mensajes del número del motel (número normal y LID)
   const NUMERO_MOTEL = (process.env.EMPRESA_NUMERO || '56945676410');
-  const LIDS_MOTEL = ['160009157619778'];
-  if (telefono === NUMERO_MOTEL || LIDS_MOTEL.includes(telefono)) return;
-  if (rawFrom.includes('160009157619778') || rawFrom.includes(NUMERO_MOTEL)) return;
+  const LID_MOTEL = '160009157619778';
+  if (telefono === NUMERO_MOTEL || telefono === LID_MOTEL) return;
   // Mapear LIDs conocidos al número real
   const LID_MAP = { '202902928908358': '56991655665', '217274023702535': process.env.ADMIN_NUMERO || '56949716039' };
   if (LID_MAP[telefono]) telefono = LID_MAP[telefono];
@@ -272,9 +271,37 @@ Usa /libre para reactivar.`);
   // Tomar todos los mensajes acumulados y unirlos
   const pendientes = mensajesPendientes.get(telefono) || [];
   mensajesPendientes.delete(telefono);
-  const textoFinal = pendientes.join(' ');
-  if (textoFinal !== texto && pendientes.length > 1) {
-    console.log(`📨 Mensajes acumulados de ${telefono}: "${textoFinal}"`);
+  // Si hay más de un mensaje acumulado, procesar solo el primero
+  // para evitar que preguntas posteriores se mezclen con confirmaciones de reserva
+  let textoFinal;
+  if (pendientes.length > 1) {
+    textoFinal = pendientes[0];
+    // Guardar el resto para procesarlos después individualmente
+    for (let i = 1; i < pendientes.length; i++) {
+      setTimeout(async () => {
+        try {
+          const chat2 = await mensaje.getChat();
+          await chat2.sendStateTyping();
+          const resp2 = await procesarMensaje(telefono, pendientes[i], numeroPrueba);
+          if (resp2) {
+            if (typeof resp2 === 'object' && resp2.tarifas) {
+              const { MessageMedia } = require('whatsapp-web.js');
+              const path = require('path');
+              const fs = require('fs');
+              const rutaTarifas = path.join(__dirname, 'TARIFAS_APOLO.jpeg');
+              if (fs.existsSync(rutaTarifas)) await cliente.sendMessage(chatId, MessageMedia.fromFilePath(rutaTarifas));
+            } else {
+              const textoResp = typeof resp2 === 'object' ? resp2.texto : resp2;
+              if (textoResp) await cliente.sendMessage(chatId, textoResp);
+            }
+            await chat2.clearState();
+          }
+        } catch (e) { console.error('Error procesando mensaje pendiente:', e.message); }
+      }, 2000 * i);
+    }
+    console.log(`📨 Procesando primero: "${textoFinal}", pendientes: ${pendientes.slice(1).join(' | ')}`);
+  } else {
+    textoFinal = pendientes[0] || texto;
   }
 
   const chat = await mensaje.getChat();
@@ -363,8 +390,12 @@ Usa /libre para reactivar.`);
         }
       };
 
-      // Procesar fotos primero — sin texto entremedio
+      // Enviar texto primero
+      if (textoRespuesta) await cliente.sendMessage(chatId, textoRespuesta);
+
+      // Procesar fotos — simple, múltiples o ambos moteles
       if (fotos.multiple && fotos.lista) {
+        // Múltiples grupos de fotos (ej: simple + vip)
         for (const bloque of fotos.lista) {
           await procesarBloqueForotos(bloque);
           await new Promise(r => setTimeout(r, 800));
@@ -373,12 +404,6 @@ Usa /libre para reactivar.`);
       } else {
         await procesarBloqueForotos(fotos);
         console.log(`📸 Fotos enviadas a ${telefono}`);
-      }
-
-      // Texto adicional después de las fotos con pausa
-      if (textoRespuesta && textoRespuesta.trim()) {
-        await new Promise(r => setTimeout(r, 1500));
-        await cliente.sendMessage(chatId, textoRespuesta);
       }
 
       await chat.clearState();
