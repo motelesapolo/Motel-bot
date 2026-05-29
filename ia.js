@@ -967,8 +967,10 @@ async function procesarMensaje(telefono, mensajeUsuario, numeroPrueba = null) {
 
   // Detectar palabras de confirmación para anti-loop
   const PALABRAS_CONFIRMACION = ['si','sí','ok','dale','perfecto','de acuerdo','excelente','super','correcto','claro','va','listo','confirmo','confirmado','esta bien','está bien'];
+const PALABRAS_NO_CONFIRMACION = ['con débito','con debito','con crédito','con credito','con efectivo','en efectivo','pago con','débito','debito','crédito','credito','efectivo'];
   const msgLowerConfirm = msgNormalizado.toLowerCase().trim().replace(/[!¡.]/g,'');
-  const esConfirmacion = PALABRAS_CONFIRMACION.some(p => msgLowerConfirm === p || msgLowerConfirm.includes(p));
+  const esPago = PALABRAS_NO_CONFIRMACION.some(p => msgLowerConfirm.includes(p));
+  const esConfirmacion = !esPago && PALABRAS_CONFIRMACION.some(p => msgLowerConfirm === p || msgLowerConfirm.includes(p));
   if (esConfirmacion) {
     const veces = (confirmacionesPendientes.get(telefono) || 0) + 1;
     confirmacionesPendientes.set(telefono, veces);
