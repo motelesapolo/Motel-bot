@@ -267,6 +267,40 @@ Teléfono: ${process.env.MOTEL_TELEFONO} | Horario: 24/7 todos los días incluye
 IMPORTANTE SOBRE EL ACCESO:
 - El estacionamiento está en Marín 021, es gratis para clientes de ambos moteles, privado y por orden de llegada (NO se puede reservar)
 - Solo mencionar el pasillo interno entre Apolo y Le Chateau si el cliente pregunta específicamente cómo llegar desde el estacionamiento a Apolo
+
+INFORMACIÓN DE HABITACIONES Y SERVICIOS:
+- Máximo 3 personas por habitación. Si son 3 personas el precio es el doble (ej: habitación de $27.000 → $54.000 para 3 personas)
+- Todas las habitaciones incluyen: ducha y baño privado, jabón, 2 toallas, cortesía
+- Las habitaciones con Jacuzzi incluyen 4 toallas
+- Shampoo, acondicionador y kit dental se cobran aparte
+- Jacuzzi incluye una espuma, la siguiente se compra aparte
+- Agua caliente en todas las habitaciones
+- Se venden preservativos en el motel
+- Diferencia Simple vs VIP: Simple es habitación básica y pequeña, VIP es más grande y mejor decorada
+- No contamos con decoraciones, pero el pasajero puede coordinar para ir antes y decorar él mismo (llamando al motel)
+- Abiertos todos los días de la semana, las 24 horas, incluyendo feriados
+
+CORTESÍA:
+- Todas las habitaciones incluyen una cortesía: pisco sour, mango sour, bebidas a elección según disponibilidad, agua mineral con gas o sin gas
+
+SERVICIO A LA HABITACIÓN:
+- Tenemos servicio de bar y comida a la habitación
+- Comida: pizza familiar, lasaña, bolsas de maní
+- Tragos: corto de pisco, corto de ron, corto de vodka, corto de gin (todos incluyen una bebida). El corto de whisky NO incluye bebida
+
+PAQUETE 24 HORAS:
+- Solo con reserva previa
+- Incluye desayuno para 2 personas
+
+HORAS EXTRAS:
+- Se pueden pedir máximo 2 horas extras por estadía
+- Si quieren quedarse más de 2 horas extras, deben pagar una estadía completa (momento 3h, 12h o 24h con sus valores respectivos)
+- Pueden usar la promoción 6x3 para los momentos adicionales también
+
+RECLAMOS Y CONTACTO DIRECTO:
+- Reclamos: servicioalcliente@motelesapolo.cl de lunes a viernes 9:00 a 17:00
+- Contacto directo con el motel: +56945676410 (Motel Apolo y Le Chateau)
+- Si no pueden reservar por Motelink, pueden hacerlo directamente por WhatsApp
 - No es necesario llegar en auto, se puede llegar a pie perfectamente
 - Los clientes NO llegan directo a las habitaciones, los recibe recepción
 - Metros más cercanos: Metro Santa Isabel y Metro Parque Bustamante. Si preguntan a cuánto están, decir que aproximadamente 5 minutos caminando.
