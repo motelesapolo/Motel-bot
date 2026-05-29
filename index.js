@@ -271,41 +271,21 @@ Usa /libre para reactivar.`);
   mensajesPendientes.delete(telefono);
   // Si hay más de un mensaje acumulado, procesar solo el primero
   // para evitar que preguntas posteriores se mezclen con confirmaciones de reserva
-  let textoFinal;
+  // Unir todos los mensajes acumulados en uno solo
+  const textoFinal = pendientes.join(' ');
   if (pendientes.length > 1) {
-    textoFinal = pendientes[0];
-    // Guardar el resto para procesarlos después individualmente
-    for (let i = 1; i < pendientes.length; i++) {
-      setTimeout(async () => {
-        try {
-          const chat2 = await mensaje.getChat();
-          await chat2.sendStateTyping();
-          const resp2 = await procesarMensaje(telefono, pendientes[i], numeroPrueba);
-          if (resp2) {
-            if (typeof resp2 === 'object' && resp2.tarifas) {
-              const { MessageMedia } = require('whatsapp-web.js');
-              const path = require('path');
-              const fs = require('fs');
-              const rutaTarifas = path.join(__dirname, 'TARIFAS_APOLO.jpeg');
-              if (fs.existsSync(rutaTarifas)) await cliente.sendMessage(chatId, MessageMedia.fromFilePath(rutaTarifas));
-            } else {
-              const textoResp = typeof resp2 === 'object' ? resp2.texto : resp2;
-              if (textoResp) await cliente.sendMessage(chatId, textoResp);
-            }
-            await chat2.clearState();
-          }
-        } catch (e) { console.error('Error procesando mensaje pendiente:', e.message); }
-      }, 2000 * i);
-    }
-    console.log(`📨 Procesando primero: "${textoFinal}", pendientes: ${pendientes.slice(1).join(' | ')}`);
-  } else {
-    textoFinal = pendientes[0] || texto;
+    console.log(`📨 Mensajes acumulados de ${telefono}: "${textoFinal}"`);
   }
 
   const chat = await mensaje.getChat();
   await chat.sendStateTyping();
 
   try {
+    // Delay variable según largo del mensaje — simula tiempo de lectura humano
+    const palabras = (textoFinal || texto).split(' ').length;
+    const delayRespuesta = palabras <= 5 ? 2000 : palabras <= 15 ? 3000 : 4000;
+    await new Promise(r => setTimeout(r, delayRespuesta));
+
     const respuesta = await procesarMensaje(telefono, textoFinal || texto, numeroPrueba);
     
     // Si es null, el cliente está esperando agente - no responder
@@ -388,12 +368,8 @@ Usa /libre para reactivar.`);
         }
       };
 
-      // Enviar texto primero
-      if (textoRespuesta) await cliente.sendMessage(chatId, textoRespuesta);
-
-      // Procesar fotos — simple, múltiples o ambos moteles
+      // Fotos primero — texto adicional después con pausa
       if (fotos.multiple && fotos.lista) {
-        // Múltiples grupos de fotos (ej: simple + vip)
         for (const bloque of fotos.lista) {
           await procesarBloqueForotos(bloque);
           await new Promise(r => setTimeout(r, 800));
@@ -402,6 +378,11 @@ Usa /libre para reactivar.`);
       } else {
         await procesarBloqueForotos(fotos);
         console.log(`📸 Fotos enviadas a ${telefono}`);
+      }
+
+      if (textoRespuesta && textoRespuesta.trim()) {
+        await new Promise(r => setTimeout(r, 1500));
+        await cliente.sendMessage(chatId, textoRespuesta);
       }
 
       await chat.clearState();
