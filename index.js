@@ -5,7 +5,6 @@ require('dotenv').config();
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const express = require('express');
 const { procesarMensaje, limpiarConversacion, setClienteWhatsApp, reactivarCliente, bloquearHabitacion, liberarHabitacion, getEstadoBloqueos } = require('./ia');
-const { iniciarRecordatorios } = require('./recordatorios');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -66,7 +65,6 @@ cliente.on('ready', () => {
   console.log(`🏨 ${process.env.MOTEL_NOMBRE} - LISTO`);
   botConectado = true; qrActual = null;
   setClienteWhatsApp(cliente);
-  iniciarRecordatorios(cliente);
 });
 cliente.on('auth_failure', (msg) => console.error('❌ Auth failure:', msg));
 cliente.on('disconnected', (reason) => {
