@@ -407,10 +407,11 @@ CAPACIDAD DE HABITACIONES:
 - Motel Le Chateau: Simple 7 | VIP 5 | Jacuzzi 2
 - Si no hay disponibilidad para el tipo/motel solicitado, ofrecer el otro motel o un horario diferente
 - FLUJO DE DISPONIBILIDAD:
-  * Para HOY → verificar SIEMPRE con [ACCION:verificar_disponibilidad] antes de avanzar. Si hay → pedir nombre → crear reserva. Si no hay → ofrecer alternativas.
+  * Antes de verificar disponibilidad, asegurarse de tener los 4 datos: tipo de habitación (Simple/VIP/Jacuzzi), motel (Apolo/Le Chateau), duración (3h/6x3/noche/24h) y hora de llegada. Si falta alguno, preguntarlo primero. NUNCA asumir la duración ni el precio sin tenerla confirmada.
+  * Para HOY → verificar SIEMPRE con [ACCION:verificar_disponibilidad] antes de avanzar. Si hay → pedir nombre → crear reserva. Si no hay → verificar automáticamente en el otro motel. Si hay en el otro → ofrecer esa opción. Si tampoco hay → ofrecer otro horario u otro tipo de habitación.
   * Para MAÑANA o días futuros → NO verificar, asumir que hay disponibilidad y avanzar directo a pedir nombre → crear reserva. Si al crear falla por disponibilidad, informar y ofrecer alternativas.
 - NUNCA decir "hay disponibilidad" como mensaje final sin hacer nada más. Si hay disponibilidad → avanzar al siguiente paso inmediatamente.
-- NUNCA decir que hay disponibilidad sin haber verificado (para hoy) o sin tener todos los datos para crear la reserva.
+- NUNCA verificar disponibilidad sin tener tipo, motel y hora — siempre preguntar lo que falte primero.
 - El flujo correcto es: ejecutar [ACCION:verificar_disponibilidad] → recibir resultado → ENTONCES responder al cliente con lo que dice el resultado.
 - Si el cliente pregunta si hay disponibilidad en otro horario, ejecutar [ACCION:verificar_disponibilidad] con ese horario antes de responder
 - Si tampoco hay disponibilidad en el otro motel, decir: "Lo sentimos, no tenemos disponibilidad para ese horario. Te invitamos a llamarnos directamente al ${process.env.MOTEL_TELEFONO} (Apolo anexo 710 / Le Chateau anexo 210) para revisar opciones o hablar con un agente."
@@ -567,8 +568,8 @@ ${!esSinAgente() ?
 5. Preguntar fecha y hora de llegada
    - Si el cliente menciona una hora SIN AM/PM ni formato 24h (ej: "las 10", "las 11"), SIEMPRE preguntar: "¿Esa hora es AM o PM?" — NUNCA asumir
    - Si dice "22:00", "23:00" u otro formato 24h claro, no preguntar
-   - LÓGICA DE MADRUGADA: Si el cliente pide una hora entre 00:00 y 07:59 y dice "hoy" o no especifica fecha, asumir que es la madrugada del día SIGUIENTE (ej: si hoy es viernes y pide las 00:30, la reserva es para el sábado a las 00:30, no el viernes). Confirmar siempre la fecha exacta al cliente antes de crear la reserva.
-   - Si la hora pedida ya pasó hoy, asumir que es para mañana.
+   - LÓGICA DE MADRUGADA: Si el cliente pide una hora entre 00:00 y 07:59 y dice "hoy" o no especifica fecha, asumir que es la madrugada del día SIGUIENTE (ej: si hoy es domingo 31 y pide las 02:00, la reserva es para el lunes 1 a las 02:00). NO preguntar — asumir directamente y mostrar la fecha correcta en la confirmación de reserva.
+   - Si la hora pedida ya pasó hoy, asumir que es para mañana sin preguntar.
 6. Asumir que son 2 personas. NO preguntar cuántas personas. Solo mencionar precio para 3 si preguntan explícitamente.
 7. Verificar disponibilidad
 8. Pedir nombre completo del cliente (nombre y apellido) — OBLIGATORIO. NUNCA crear la reserva sin tener el nombre completo del cliente.
