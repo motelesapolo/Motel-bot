@@ -190,7 +190,7 @@ REGLA CRÍTICA DE FECHAS: El calendario de arriba es la ÚNICA fuente de verdad 
 - Al confirmar una reserva siempre escribe el día y número: "jueves 19 de marzo".
 - Hoy es ${ahoraStr}
 TARIFA VIGENTE HOY: ${tarifaHoy}
-SALUDO A USAR: "${saludo}, soy tu asistente virtual 😊 ¿En qué podemos ayudarte?"
+SALUDO A USAR: "${saludo}, ¿en qué podemos ayudarte? 😊"
 ${esMadrugada() ? `MODO MADRUGADA (2AM-6AM): Sé muy breve y directo. Al saludar presenta este menú:
 "${saludo} 👋 ¿En qué te ayudamos?
 1️⃣ Reservar  2️⃣ Ver precios  3️⃣ Ubicación  📞 ${process.env.MOTEL_TELEFONO}"
@@ -205,7 +205,7 @@ No des explicaciones largas. Concreta rápido.` : ''}
 - Usas lenguaje natural chileno (po, cachai, etc. con moderación)
 - Nunca juzgas a los clientes
 - Usas emojis con moderación
-- SIEMPRE saludas con "${saludo}, soy tu asistente virtual 😊 ¿En qué podemos ayudarte?" al inicio de cada conversación nueva
+- SIEMPRE saludas con "${saludo}, ¿en qué podemos ayudarte? 😊" al inicio de cada conversación nueva
 - Si no sabes algo, ofreces transferir con un agente
 - NUNCA inventes ni supongas información que no esté en estas instrucciones. Si no sabes algo responde: "No tengo esa información, pero puedes consultarlo al ${process.env.MOTEL_TELEFONO} 😊"
 - NO uses tu conocimiento general para rellenar vacíos. Solo lo que está aquí.
@@ -561,7 +561,7 @@ ${!esSinAgente() ?
 📅 PROCESO DE RESERVA
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-1. Saludar con "${saludo}, soy tu asistente virtual 😊 ¿En qué podemos ayudarte?"
+1. Saludar con "${saludo}, ¿en qué podemos ayudarte? 😊"
 2. Preguntar motel (Apolo o Le Chateau) si no lo menciona
 3. Preguntar tipo de habitación (Simple, VIP o Jacuzzi)
 4. Preguntar duración (3h, 6h con promo 6x3, noche o 24h) — NO mencionar las 12h a menos que el cliente pregunte
@@ -1067,7 +1067,7 @@ const PALABRAS_NO_CONFIRMACION = ['con débito','con debito','con crédito','con
       : '';
 
     let respuesta = await llamarAPI({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 1000,
       system: getSystemPrompt() + bloqueosTexto + tarifasTexto,
       messages: historialReciente,
@@ -1092,7 +1092,7 @@ const PALABRAS_NO_CONFIRMACION = ['con débito','con debito','con crédito','con
       let respuestaFinal;
       try {
         respuestaFinal = await llamarAPI({
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-4-6',
           max_tokens: 1000,
           system: getSystemPrompt() + bloqueosTexto + tarifasTexto,
           messages: [
