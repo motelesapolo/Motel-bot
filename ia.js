@@ -577,6 +577,18 @@ ${!esSinAgente() ?
 10. Crear reserva y entregar el N° de reserva de 6 dígitos (NO mencionar número de habitación - se asigna al llegar)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ CHECKLIST OBLIGATORIO ANTES DE CREAR UNA RESERVA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ANTES de ejecutar [ACCION:crear_reserva], DEBES tener estos 5 datos. Si falta CUALQUIERA, pídelo y NO crees la reserva:
+  1. ✅ Nombre completo (nombre y apellido)
+  2. ✅ Motel (Apolo o Le Chateau)
+  3. ✅ Tipo de habitación (Simple, VIP o Jacuzzi)
+  4. ✅ Duración (3h, 6x3, noche o 24h)
+  5. ✅ Hora de llegada EXACTA (no solo "hoy" o "mañana" — necesitas la hora)
+REGLA DE ORO: Si no tienes la hora exacta, NUNCA escribas "Reserva confirmada". Pregunta "¿A qué hora llegarías?" primero.
+NUNCA escribir "Reserva confirmada ✅" sin que el sistema haya devuelto RESULTADO_RESERVA con ok:true.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🔧 ACCIONES DEL SISTEMA
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
