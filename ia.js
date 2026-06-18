@@ -629,10 +629,13 @@ REGLAS:
 - "muchas gracias", "gracias" NO son confirmación de reserva — son agradecimiento. Si el cliente agradece después de una reserva ya creada, responder con cortesía SIN crear otra reserva.
 - Si el cliente ya confirmó una vez y vuelves a preguntar si confirma → estás en un loop. PARA el loop ejecutando [ACCION:crear_reserva] de inmediato.
 - MÁXIMO UNA VEZ puedes pedir confirmación. Si el cliente responde cualquier cosa afirmativa, crear la reserva sin más preguntas.
-- PRIORIDAD DE ACCIONES: Si en un mismo mensaje el cliente da el nombre Y hace otra pregunta, PRIMERO ejecuta [ACCION:crear_reserva] con los datos que tienes, y DESPUÉS responde la otra pregunta en el mismo mensaje. NUNCA dejar una reserva pendiente por responder otra pregunta.
-- Si ya verificaste disponibilidad y hay disponibilidad, y el cliente da su nombre → crear la reserva INMEDIATAMENTE sin reverificar disponibilidad. NO decir "hay disponibilidad" y quedarse esperando — ejecutar [ACCION:crear_reserva] en el mismo mensaje.
+- ANTES DE CREAR LA RESERVA, verifica que tienes los 5 datos OBLIGATORIOS: nombre, motel, tipo de habitación, duración y HORA DE LLEGADA exacta. Si falta alguno (especialmente la hora), NO crear la reserva — pedir el dato que falta primero. NUNCA crear una reserva sin hora de llegada confirmada.
+- NUNCA escribir "Reserva confirmada ✅" sin que el sistema haya devuelto RESULTADO_RESERVA con ok:true. Si no ejecutaste la acción o falta un dato, NO escribas "Reserva confirmada".
+- PRIORIDAD DE ACCIONES: Si en un mismo mensaje el cliente da el nombre Y hace otra pregunta, y ya tienes los 5 datos obligatorios, PRIMERO ejecuta [ACCION:crear_reserva] y DESPUÉS responde la otra pregunta en el mismo mensaje. Si falta algún dato, pídelo en vez de crear.
+- Si ya verificaste disponibilidad y hay disponibilidad, Y TIENES LA HORA DE LLEGADA, y el cliente da su nombre → crear la reserva INMEDIATAMENTE. Pero si NO tienes la hora exacta, pídela primero antes de crear. NO decir "hay disponibilidad" y quedarse esperando.
 - NUNCA terminar un mensaje diciendo solo "hay disponibilidad" sin crear la reserva o pedir algún dato que falta. Si tienes nombre, motel, tipo, fecha y hora → crear reserva ahora.
 - Si el sistema responde RESERVA_YA_CREADA: significa que ya se creó una reserva en esta conversación. NO crear otra. Responder con la confirmación de la reserva existente usando el ID que retorna.
+- Si el sistema responde DATOS_INCOMPLETOS: falta un dato (hora, nombre o tipo). NO escribir "Reserva confirmada". Pedir amablemente el dato que falta.
 - Si el sistema responde BLOQUEADO_MANUALMENTE: no hay disponibilidad de ese tipo de habitación en este momento. Informar al cliente y ofrecer otras opciones disponibles.
 - No hay restricción de horario general — se puede reservar a cualquier hora
 
@@ -754,6 +757,10 @@ async function procesarAccion(accion, datos, telefono) {
       return `RESULTADO_DISPONIBILIDAD: ${JSON.stringify(result)}`;
     }
     case 'crear_reserva': {
+      // VALIDACIÓN: no crear reserva sin datos esenciales (especialmente la hora)
+      if (!datos.fechaInicio || !datos.nombre || !datos.tipo) {
+        return `RESULTADO_RESERVA: {"ok": false, "error": "DATOS_INCOMPLETOS", "mensaje": "Falta la hora de llegada, el nombre o el tipo de habitación. Pedir el dato faltante antes de crear."}`;
+      }
       // Verificar bloqueos manuales antes de crear
       const motelBlq = (datos.motel || '').toLowerCase().includes('chateau') ? 'chateau' : 'apolo';
       const tipoBlq = (datos.tipo || '').toLowerCase().includes('jacuzzi') ? 'jacuzzi' :
