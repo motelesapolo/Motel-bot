@@ -617,13 +617,16 @@ REGLAS:
 - SIEMPRE manda la fecha completa con hora en fechaInicio (ej: "2026-04-20T23:00:00"), NUNCA solo la fecha sin hora
 - NUNCA confirmes una reserva ni entregues un número de reserva sin antes ejecutar [ACCION:crear_reserva]. El número lo entrega el sistema en RESULTADO_RESERVA, no lo inventes.
 - NUNCA digas "procedo a crear tu reserva", "voy a crear tu reserva" o similares sin incluir [ACCION:crear_reserva] en el mismo mensaje.
-- Al informar el precio al cliente SIEMPRE usar el precio correcto según la fecha: semana (dom 8AM - vie 7:59AM) o fin de semana (vie 8AM - dom 7:59AM). El sistema calculará el precio final, pero el precio que le muestras al cliente debe ser correcto.
+- Al informar el precio al cliente SIEMPRE usar el precio correcto según la fecha: semana (dom 8AM - vie 7:59AM) o fin de semana (vie 8AM - dom 7:59AM).
+- IMPORTANTE: Si el cliente pregunta el precio ANTES de dar la fecha, NO asumas tarifa semana. Pregunta primero la fecha, o aclara "el precio depende del día". NUNCA des un precio de semana y luego lo cambies.
+- En la CONFIRMACIÓN de reserva, usa SIEMPRE el precio que entrega el sistema en RESULTADO_RESERVA (campo precio). NUNCA escribas un precio distinto al que devuelve el sistema. Si el sistema dice $53.000, escribe $53.000, no otro valor.
 - VÍSPERA DE FERIADO: el día anterior a un feriado desde las 8AM se cobra como fin de semana. Ejemplo: si el feriado es el jueves 21, el miércoles 20 desde las 8AM es tarifa finde.
 - MADRUGADA DE VÍSPERA: si la reserva es para la madrugada (00:00 a 07:59) del día feriado, también es tarifa finde porque es continuación de la víspera. Ejemplo: jueves 21 a la 01:00 AM → tarifa finde $29.000 (no $27.000).
 - El feriado mismo desde las 8AM → semana (a menos que caiga viernes o sábado).
 - En caso de duda sobre si es semana o finde, usar SIEMPRE tarifa finde para no cobrar de menos. Si tienes todos los datos, ejecuta la acción directamente sin anunciarlo.
 - NUNCA digas "tu reserva ha sido modificada", "el cambio fue exitoso" o similares sin haber ejecutado [ACCION:crear_reserva] con esModificacion: true en el mismo mensaje. Si tienes todos los datos para modificar, ejecuta la acción directamente.
-- Cuando el cliente confirma ("si", "ok", "dale", "perfecto", "de acuerdo", "excelente", "super", "correcto", "muchas gracias", "claro", "va", "listo", "confirmo") y ya tienes nombre, motel, tipo, fecha y hora → ejecutar [ACCION:crear_reserva] INMEDIATAMENTE. NUNCA volver a pedir confirmación si el cliente ya confirmó.
+- Cuando el cliente confirma ("si", "ok", "dale", "perfecto", "de acuerdo", "excelente", "super", "correcto", "claro", "va", "listo", "confirmo") y ya tienes nombre, motel, tipo, fecha y hora → ejecutar [ACCION:crear_reserva] INMEDIATAMENTE. NUNCA volver a pedir confirmación si el cliente ya confirmó.
+- "muchas gracias", "gracias" NO son confirmación de reserva — son agradecimiento. Si el cliente agradece después de una reserva ya creada, responder con cortesía SIN crear otra reserva.
 - Si el cliente ya confirmó una vez y vuelves a preguntar si confirma → estás en un loop. PARA el loop ejecutando [ACCION:crear_reserva] de inmediato.
 - MÁXIMO UNA VEZ puedes pedir confirmación. Si el cliente responde cualquier cosa afirmativa, crear la reserva sin más preguntas.
 - PRIORIDAD DE ACCIONES: Si en un mismo mensaje el cliente da el nombre Y hace otra pregunta, PRIMERO ejecuta [ACCION:crear_reserva] con los datos que tienes, y DESPUÉS responde la otra pregunta en el mismo mensaje. NUNCA dejar una reserva pendiente por responder otra pregunta.
@@ -1011,9 +1014,14 @@ async function procesarMensaje(telefono, mensajeUsuario, numeroPrueba = null) {
   // Detectar palabras de confirmación para anti-loop
   const PALABRAS_CONFIRMACION = ['si','sí','ok','dale','perfecto','de acuerdo','excelente','super','correcto','claro','va','listo','confirmo','confirmado','esta bien','está bien'];
 const PALABRAS_NO_CONFIRMACION = ['con débito','con debito','con crédito','con credito','con efectivo','en efectivo','pago con','débito','debito','crédito','credito','efectivo'];
+  // Palabras de agradecimiento — NO son confirmación de reserva
+  const PALABRAS_AGRADECIMIENTO = ['gracias','muchas gracias','muy amable','te pasaste','genial gracias'];
   const msgLowerConfirm = msgNormalizado.toLowerCase().trim().replace(/[!¡.]/g,'');
+  const esAgradecimiento = PALABRAS_AGRADECIMIENTO.some(p => msgLowerConfirm.includes(p));
   const esPago = PALABRAS_NO_CONFIRMACION.some(p => msgLowerConfirm.includes(p));
-  const esConfirmacion = !esPago && PALABRAS_CONFIRMACION.some(p => msgLowerConfirm === p || msgLowerConfirm.includes(p));
+  // Si ya hay reserva creada para este cliente, NO contar como confirmación
+  const yaTieneReserva = reservasEnProgreso.has(telefono);
+  const esConfirmacion = !esPago && !esAgradecimiento && !yaTieneReserva && PALABRAS_CONFIRMACION.some(p => msgLowerConfirm === p || msgLowerConfirm.includes(p));
   if (esConfirmacion) {
     const veces = (confirmacionesPendientes.get(telefono) || 0) + 1;
     confirmacionesPendientes.set(telefono, veces);
