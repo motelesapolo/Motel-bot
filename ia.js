@@ -1104,10 +1104,11 @@ const PALABRAS_NO_CONFIRMACION = ['con débito','con debito','con crédito','con
 
     // Verificar si hay acciones
     let fotosParaEnviar = null;
+    let resultados = '';
     if (textoRespuesta.includes('[ACCION:')) {
       console.log(`🔧 IA ejecutando acción para ${telefono}`);
       console.log(`🔧 Acciones detectadas:`, textoRespuesta.match(/\[ACCION:(\w+)\]/g));
-      const resultados = await ejecutarAccionesIA(textoRespuesta, telefono);
+      resultados = await ejecutarAccionesIA(textoRespuesta, telefono);
       console.log(`🔧 Resultado acciones:`, resultados.substring(0, 200));
       // Capturar tarifas si hay (solo si no se han enviado ya)
       if (resultados.includes('RESULTADO_TARIFAS')) {
@@ -1165,6 +1166,54 @@ Te esperamos. El pago es en recepción al llegar.`;
         ? '🏨 Cliente pide habitación específica — requiere atención manual'
         : 'El cliente solicitó hablar con un agente';
       await notificarAdmin(telefono, mensajeUsuario, motivoTransferencia);
+    }
+
+    // BLINDAJE: detectar dos situaciones problemáticas del modelo:
+    // 1. El bot dice "Reserva confirmada" pero NO ejecutó crear_reserva (confirmación falsa)
+    // 2. El cliente acaba de dar su nombre pero el bot no creó la reserva (se quedó pegado)
+    const dijoConfirmada = /reserva confirmada/i.test(textoRespuesta);
+    const ejecutoCrear = textoRespuesta.includes('[ACCION:crear_reserva]') || (resultados && resultados.includes('RESULTADO_RESERVA'));
+    // Detectar si el cliente acaba de dar su nombre (2-4 palabras, sin signos de pregunta, en contexto de reserva)
+    const msgLimpio = mensajeUsuario.trim();
+    const palabrasMsg = msgLimpio.split(/\s+/).length;
+    const pareceNombre = palabrasMsg >= 2 && palabrasMsg <= 4 && !msgLimpio.includes('?') && /^[a-záéíóúñA-ZÁÉÍÓÚÑ\s]+$/.test(msgLimpio);
+    const botPidioNombre = historialReciente.some(m => m.role === 'assistant' && /nombre completo|tu nombre/i.test(typeof m.content === 'string' ? m.content : ''));
+    const seQuedoPegado = pareceNombre && botPidioNombre && !ejecutoCrear && !dijoConfirmada && !reservasEnProgreso.has(telefono) && !textoRespuesta.includes('[ACCION:');
+
+    if ((dijoConfirmada && !ejecutoCrear && !reservasEnProgreso.has(telefono)) || seQuedoPegado) {
+      console.log(`⚠️ ${seQuedoPegado ? 'Bot pegado tras recibir nombre' : 'Confirmación falsa'} para ${telefono} — forzando creación real`);
+      try {
+        const forzar = await llamarAPI({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 1000,
+          system: getSystemPrompt() + bloqueosTexto + tarifasTexto,
+          messages: [
+            ...historialReciente,
+            { role: 'assistant', content: textoRespuesta },
+            { role: 'user', content: 'SISTEMA: Tienes el nombre del cliente y los datos de la reserva. Si tienes los 5 datos (nombre, motel, tipo, duración, hora exacta), ejecuta [ACCION:crear_reserva] AHORA en este mensaje. Si falta la hora de llegada u otro dato, NO confirmes — pide solo el dato que falta.' },
+          ],
+        });
+        const textoForzado = forzar.content[0].text;
+        if (textoForzado.includes('[ACCION:crear_reserva]')) {
+          const resultados2 = await ejecutarAccionesIA(textoForzado, telefono);
+          const final2 = await llamarAPI({
+            model: 'claude-sonnet-4-6',
+            max_tokens: 1000,
+            system: getSystemPrompt() + bloqueosTexto + tarifasTexto,
+            messages: [
+              ...historialReciente,
+              { role: 'assistant', content: textoForzado },
+              { role: 'user', content: `SISTEMA: Resultados:\n${resultados2}\nResponde al cliente sin bloques [ACCION].` },
+            ],
+          });
+          textoRespuesta = final2.content[0].text;
+        } else {
+          // El bot pidió un dato faltante en vez de confirmar — usar esa respuesta
+          textoRespuesta = textoForzado;
+        }
+      } catch (e) {
+        console.error('Error forzando creación:', e.message);
+      }
     }
 
     const respuestaLimpia = limpiarRespuesta(textoRespuesta);
