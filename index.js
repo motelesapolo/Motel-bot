@@ -261,7 +261,7 @@ Usa /libre para reactivar.`);
   }
 
   await new Promise(resolve => {
-    const timer = setTimeout(resolve, 4000);
+    const timer = setTimeout(resolve, 1500);
     procesandoCliente.set(telefono, timer);
   });
   procesandoCliente.delete(telefono);
