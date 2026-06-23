@@ -31,6 +31,17 @@ async function llamarAPI(params, intentos = 3) {
     }
   }
 }
+
+// Extrae el texto de una respuesta de la API de forma segura.
+// Si el modelo devuelve content vacío o bloques sin texto, retorna string vacío en vez de crashear.
+function extraerTexto(respuesta) {
+  if (!respuesta || !Array.isArray(respuesta.content)) return '';
+  return respuesta.content
+    .filter(b => b && b.type === 'text' && typeof b.text === 'string')
+    .map(b => b.text)
+    .join('')
+    .trim();
+}
 const conversaciones = new Map();
 const reservasEnProgreso = new Map();
 const reservasConfirmadas = new Map();   // { id, googleEventId } por reservaId
@@ -152,7 +163,7 @@ function getSystemPrompt() {
   const anioActual = ahora.getFullYear();
   const saludo = getSaludo();
 
-  // Generar calendario de los próximos 30 días en Santiago para evitar errores de fechas
+  // Generar calendario de los próximos 60 días en Santiago para evitar errores de fechas
   const diasSemana = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
   const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
   
@@ -205,12 +216,18 @@ No des explicaciones largas. Concreta rápido.` : ''}
 - Usas lenguaje natural chileno (po, cachai, etc. con moderación)
 - Nunca juzgas a los clientes
 - Usas emojis con moderación
-- SIEMPRE saludas con "${saludo}, ¿en qué podemos ayudarte? 😊" al inicio de cada conversación nueva
+- SIEMPRE saludas con "${saludo}, ¿en qué podemos ayudarte? 😊" SOLO en el primer mensaje de una conversación nueva (cuando no hay mensajes previos del cliente). NUNCA vuelvas a saludar a mitad de conversación.
+- MANEJO DE AGRADECIMIENTOS Y DESPEDIDAS: Si el cliente dice "gracias", "muchas gracias", "ok", "perfecto", "listo" u otra cortesía a mitad o al final de la conversación, responde con un cierre breve y cálido SIN volver a saludar y SIN pedir datos de reserva. Ejemplos correctos: "¡De nada! 😊", "¡Con gusto! Cuando quieras reservar me avisas 😊", "¡A ti! Que estés muy bien 😊". NUNCA respondas "Hola" ni "¿En qué te puedo ayudar?" si la conversación ya venía avanzando.
 - Si no sabes algo, ofreces transferir con un agente
 - NUNCA inventes ni supongas información que no esté en estas instrucciones. Si no sabes algo responde: "No tengo esa información, pero puedes consultarlo al ${process.env.MOTEL_TELEFONO} 😊"
 - NO uses tu conocimiento general para rellenar vacíos. Solo lo que está aquí.
 - ESTILO DE RESPUESTA: Cálido pero conciso. Responde SOLO lo que te preguntan. SIN asteriscos ni negritas (**texto**), SIN bullets (• o -), sin listas. Máximo 2 emojis por mensaje. Una pregunta a la vez.
 - REGLA PRINCIPAL: El bot responde dudas, crea reservas y nada más. No da información que no se pidió. No explica procesos. No lista opciones que no se pidieron.
+- RESPONDE SOLO LO PREGUNTADO: Contesta EXACTAMENTE lo que el cliente preguntó, nada más. No agregues datos extra "por si acaso", no ofrezcas información adicional, no sugieras cosas que no preguntó.
+  Ejemplos:
+  ✅ "¿Tienen desayuno?" → "Solo el paquete de 24 horas incluye desayuno para 2 personas 😊" (NO agregar que se vende aparte, salvo que pregunte)
+  ✅ "¿Tienen estacionamiento?" → "Sí, gratuito en Marín 021 😊" (NO agregar precios ni otra info)
+  ❌ Responder una pregunta y agregar 2 o 3 datos más que no preguntó
 - NO ASUMIR: Nunca asumas que el cliente ya sabe algo. Si pregunta un precio, dalo. Si pregunta una dirección, dala. Si pregunta qué tipos de habitación hay, díselos. Siempre responde con la información completa cuando te la piden.
 - AVANZAR DIRECTO: Si el cliente ya dio suficiente información, avanza sin pedir más datos ni explicar. Si dijo "esta noche en Apolo jacuzzi", solo pide el nombre.
 - NO EXPLICAR: Nunca expliques cómo funciona un paquete, las políticas del motel, el estacionamiento, ni nada que el cliente no haya preguntado.
@@ -245,6 +262,7 @@ VENTAS (sin hostigar):
 - NO escribir los precios en texto, siempre referirse a la imagen
 - NUNCA preguntar "¿Te gustaría que te muestre los precios?" — simplemente mandarlos
 - Ejemplo primera vez: [ACCION:enviar_tarifas]{}[/ACCION]
+- IMPORTANTE: SOLO enviar tarifas o fotos cuando el cliente las pide EN SU MENSAJE ACTUAL. NUNCA mandar fotos o tarifas si el cliente está hablando de otra cosa (saludando, agradeciendo, disculpándose, preguntando dirección, etc.). Si el cliente dice "disculpe", "gracias", "ok", "una consulta" u otra cosa que no sea pedir precios/fotos, NO incluyas ninguna acción de fotos o tarifas.
 - Cuando envías fotos o tarifas, el texto que acompaña la acción debe ser SOLO una introducción breve a las fotos (ej: "Aquí las fotos 😊"). Cualquier otra pregunta del cliente (estacionamiento, dirección, precios) que haya llegado junto con la solicitud de fotos, ponla en el texto DESPUÉS de la acción, así el sistema la mandará después de las fotos.
   Ejemplo: cliente pregunta fotos y estacionamiento → [ACCION:enviar_fotos]...[/ACCION] "Sí, estacionamiento gratuito en Marín 021 😊"
 - Si muestra intención de reservar → avanza directo al cierre sin rodeos
@@ -280,22 +298,14 @@ INFORMACIÓN DE HABITACIONES Y SERVICIOS:
 - No contamos con decoraciones, pero el pasajero puede coordinar para ir antes y decorar él mismo (llamando al motel)
 - Abiertos todos los días de la semana, las 24 horas, incluyendo feriados
 
-CORTESÍA:
-- Todas las habitaciones incluyen una cortesía: pisco sour, mango sour, bebidas a elección según disponibilidad, agua mineral con gas o sin gas
-
-SERVICIO A LA HABITACIÓN:
-- Tenemos servicio de bar y comida a la habitación
-- Comida: pizza familiar, lasaña, bolsas de maní
-- Tragos: corto de pisco, corto de ron, corto de vodka, corto de gin (todos incluyen una bebida). El corto de whisky NO incluye bebida
-
 PAQUETE 24 HORAS:
 - Solo con reserva previa
 - Incluye desayuno para 2 personas
 
-HORAS EXTRAS:
-- Se pueden pedir máximo 2 horas extras por estadía
-- Si quieren quedarse más de 2 horas extras, deben pagar una estadía completa (momento 3h, 12h o 24h con sus valores respectivos)
-- Pueden usar la promoción 6x3 para los momentos adicionales también
+DESAYUNO (solo si preguntan):
+- El paquete de 24 horas incluye desayuno para 2 personas
+- En los demás paquetes el desayuno NO está incluido, pero se puede comprar aparte a $7.000
+- Solo mencionar esta información si el cliente pregunta por el desayuno. No ofrecerlo de forma proactiva.
 
 RECLAMOS Y CONTACTO DIRECTO:
 - Reclamos: servicioalcliente@motelesapolo.cl de lunes a viernes 9:00 a 17:00
@@ -580,7 +590,7 @@ ${!esSinAgente() ?
 ✅ CHECKLIST OBLIGATORIO ANTES DE CREAR UNA RESERVA
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ANTES de ejecutar [ACCION:crear_reserva], DEBES tener estos 5 datos. Si falta CUALQUIERA, pídelo y NO crees la reserva:
-  1. ✅ Nombre completo (nombre y apellido)
+  1. ✅ Nombre completo (nombre Y apellido — si solo dan el nombre, pedir el apellido)
   2. ✅ Motel (Apolo o Le Chateau)
   3. ✅ Tipo de habitación (Simple, VIP o Jacuzzi)
   4. ✅ Duración (3h, 6x3, noche o 24h)
@@ -648,6 +658,8 @@ REGLAS:
 - NUNCA terminar un mensaje diciendo solo "hay disponibilidad" sin crear la reserva o pedir algún dato que falta. Si tienes nombre, motel, tipo, fecha y hora → crear reserva ahora.
 - Si el sistema responde RESERVA_YA_CREADA: significa que ya se creó una reserva en esta conversación. NO crear otra. Responder con la confirmación de la reserva existente usando el ID que retorna.
 - Si el sistema responde DATOS_INCOMPLETOS: falta un dato (hora, nombre o tipo). NO escribir "Reserva confirmada". Pedir amablemente el dato que falta.
+- Si el sistema responde FALTA_HORA: no incluiste la hora de llegada en fechaInicio. NO escribir "Reserva confirmada". Preguntar "¿A qué hora llegarías?" y volver a crear con la fecha y hora completas (formato 2026-MM-DDTHH:MM:00).
+- Si el sistema responde FALTA_APELLIDO: el cliente dio solo su nombre. NO escribir "Reserva confirmada". Pedir amablemente el apellido: "¿Me das tu apellido también para la reserva? 😊" y luego crear con nombre y apellido completos.
 - Si el sistema responde BLOQUEADO_MANUALMENTE: no hay disponibilidad de ese tipo de habitación en este momento. Informar al cliente y ofrecer otras opciones disponibles.
 - No hay restricción de horario general — se puede reservar a cualquier hora
 
@@ -734,7 +746,7 @@ async function notificarEmpresa(datos, result, tipo, precio, duracionHoras, tele
       `👤 Cliente: ${datos.nombre}`,
 
       `🛏️ Tipo: ${tipoLabel}`,
-      `👥 Personas: ${datos.personas || 1}`,
+      `👥 Personas: ${datos.personas || 2}`,
       `💰 Precio: $${precio.toLocaleString('es-CL')} CLP`,
       `🕐 Llegada: ${inicioSantiago}`,
       `🕑 Salida est.: ${finSantiago}`,
@@ -773,6 +785,15 @@ async function procesarAccion(accion, datos, telefono) {
       if (!datos.fechaInicio || !datos.nombre || !datos.tipo) {
         return `RESULTADO_RESERVA: {"ok": false, "error": "DATOS_INCOMPLETOS", "mensaje": "Falta la hora de llegada, el nombre o el tipo de habitación. Pedir el dato faltante antes de crear."}`;
       }
+      // Validar que el nombre tenga al menos nombre y apellido (2 palabras)
+      const palabrasNombre = datos.nombre.trim().split(/\s+/).filter(p => p.length >= 2).length;
+      if (palabrasNombre < 2) {
+        return `RESULTADO_RESERVA: {"ok": false, "error": "FALTA_APELLIDO", "mensaje": "El cliente dio solo el nombre. Pedir amablemente el apellido también para completar la reserva."}`;
+      }
+      // VALIDACIÓN: la fecha debe incluir una hora explícita (formato con T)
+      if (!datos.fechaInicio.includes('T')) {
+        return `RESULTADO_RESERVA: {"ok": false, "error": "FALTA_HORA", "mensaje": "La fecha no incluye hora de llegada. Preguntar al cliente a qué hora llegaría antes de crear."}`;
+      }
       // Verificar bloqueos manuales antes de crear
       const motelBlq = (datos.motel || '').toLowerCase().includes('chateau') ? 'chateau' : 'apolo';
       const tipoBlq = (datos.tipo || '').toLowerCase().includes('jacuzzi') ? 'jacuzzi' :
@@ -780,32 +801,13 @@ async function procesarAccion(accion, datos, telefono) {
       if (bloqueosManuales.get(`${motelBlq}_${tipoBlq}`)) {
         return `RESULTADO_RESERVA: {"ok": false, "error": "BLOQUEADO_MANUALMENTE", "mensaje": "No hay disponibilidad en este momento para ese tipo de habitación"}`;
       }
-      // Si ya se confirmó disponibilidad para este cliente, confiar en eso y no reverificar
-      const dispConfirmada = disponibilidadConfirmada.get(telefono);
-      if (!dispConfirmada) {
-        // No se verificó disponibilidad antes — verificar ahora
-        const dispCheck = await consultarDisponibilidad(datos.fechaInicio, datos.duracionHoras || 3, datos.motel || '', datos.tipo || '');
-        if (!dispCheck.hayDisponibilidad) {
-          return `RESULTADO_RESERVA: {"ok": false, "error": "Sin disponibilidad en ese horario"}`;
-        }
-      }
       // Evitar crear reserva duplicada si ya se creó una en esta conversación recientemente
       const reservaReciente = reservasEnProgreso.get(telefono);
       if (reservaReciente && !datos.esModificacion) {
         return `RESULTADO_RESERVA: {"ok": false, "error": "RESERVA_YA_CREADA", "id": "${reservaReciente}"}`;
       }
 
-      // Si fechaInicio no tiene hora, usar la hora actual en Santiago
-      let fechaInicio = datos.fechaInicio || '';
-      if (fechaInicio && !fechaInicio.includes('T')) {
-        const local = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Santiago' }));
-        const hh = String(local.getHours()).padStart(2, '0');
-        const mm = String(local.getMinutes()).padStart(2, '0');
-        fechaInicio = `${fechaInicio}T${hh}:${mm}:00`;
-        console.log(`⚠️ Fecha sin hora corregida a: ${fechaInicio}`);
-      }
-      datos = { ...datos, fechaInicio };
-
+      // La fecha ya viene validada con hora (FALTA_HORA se rechazó arriba)
       // Validar hora para noche
       const _fechaCheck = parsearFechaSantiago(datos.fechaInicio);
       const _localCheck = new Date(_fechaCheck.toLocaleString('en-US', { timeZone: 'America/Santiago' }));
@@ -844,14 +846,16 @@ async function procesarAccion(accion, datos, telefono) {
       const personas = datos.personas || 2;
       if (personas === 3) precio = precio * 2;
 
-      // No bloquear múltiples reservas del mismo cliente — Calendar verifica disponibilidad real
-
-      const disp = await consultarDisponibilidad(datos.fechaInicio, duracionHoras);
-      if (!disp.hayDisponibilidad) {
-        return 'RESULTADO_RESERVA: {"ok": false, "error": "Sin disponibilidad en ese horario"}';
-      }
-      if (disp.disponibles === 0) {
-        await notificarAdmin(telefono, datos.fechaInicio, `⚠️ MOTEL LLENO: No hay habitaciones ${datos.tipo || ''} en ${datos.motel || 'Apolo'}`);
+      // Verificación de disponibilidad ÚNICA y correcta (con motel y tipo, y duración ya corregida).
+      // Si ya se confirmó disponibilidad antes en esta conversación, se confía en eso y no se reverifica.
+      if (!disponibilidadConfirmada.get(telefono)) {
+        const disp = await consultarDisponibilidad(datos.fechaInicio, duracionHoras, datos.motel || '', datos.tipo || '');
+        if (!disp.hayDisponibilidad) {
+          return 'RESULTADO_RESERVA: {"ok": false, "error": "Sin disponibilidad en ese horario"}';
+        }
+        if (disp.disponibles === 0) {
+          await notificarAdmin(telefono, datos.fechaInicio, `⚠️ MOTEL LLENO: No hay habitaciones ${datos.tipo || ''} en ${datos.motel || 'Apolo'}`);
+        }
       }
 
       // Si es modificación, recuperar y borrar reserva anterior
@@ -947,14 +951,41 @@ Datos: ${datos.motel} | ${tipoLabel} | ${datos.fechaInicio} | $${precio.toLocale
   }
 }
 
+// Intenta parsear JSON, reparando errores comunes que el modelo a veces comete
+function parsearJSONTolerante(str) {
+  const limpio = (str || '').trim();
+  if (!limpio) return {};
+  try {
+    return JSON.parse(limpio);
+  } catch (e) {
+    // Intentar reparar errores comunes: comas extra antes de } o ]
+    let reparado = limpio
+      .replace(/,\s*([}\]])/g, '$1')   // coma extra antes de cierre
+      .replace(/}\s*{/g, '},{');         // objetos pegados
+    try {
+      return JSON.parse(reparado);
+    } catch (e2) {
+      // Último intento: extraer pares "clave":"valor" manualmente
+      const obj = {};
+      const pares = reparado.matchAll(/"(\w+)"\s*:\s*"([^"]*)"/g);
+      for (const p of pares) obj[p[1]] = p[2];
+      const paresNum = reparado.matchAll(/"(\w+)"\s*:\s*(\d+)/g);
+      for (const p of paresNum) obj[p[1]] = Number(p[2]);
+      if (Object.keys(obj).length > 0) return obj;
+      throw e; // No se pudo reparar
+    }
+  }
+}
+
 async function ejecutarAccionesIA(texto, telefono) {
   const regex = /\[ACCION:(\w+)\]\s*([\s\S]*?)\[\/ACCION\]/g;
   let match, resultados = '';
   while ((match = regex.exec(texto)) !== null) {
     try {
-      const datos = JSON.parse(match[2].trim());
+      const datos = parsearJSONTolerante(match[2]);
       resultados += await procesarAccion(match[1], datos, telefono) + '\n';
     } catch (e) {
+      console.error(`Error parseando acción ${match[1]}:`, match[2]?.substring(0, 100));
       resultados += `ERROR_ACCION: ${e.message}\n`;
     }
   }
@@ -962,11 +993,19 @@ async function ejecutarAccionesIA(texto, telefono) {
 }
 
 function limpiarRespuesta(texto) {
-  return texto
-    .replace(/\[ACCION:\w+\][\s\S]*?\[\/ACCION\]/g, '')
+  if (!texto || typeof texto !== 'string') return '';
+  let limpio = texto
+    .replace(/\[ACCION:\w+\][\s\S]*?\[\/ACCION\]/g, '')   // acciones bien formadas
     .replace(/RESULTADO_\w+:.*\n?/g, '')
     .replace(/\[TRANSFERIR_AGENTE\]/g, '')
     .trim();
+  // Red de seguridad: si quedó una acción sin cerrar (el modelo olvidó [/ACCION]),
+  // eliminar desde [ACCION: hasta el final para que el cliente NUNCA vea el código crudo.
+  if (limpio.includes('[ACCION:')) {
+    console.log('⚠️ Acción sin cierre detectada — limpiando para no mostrarla al cliente');
+    limpio = limpio.replace(/\[ACCION:[\s\S]*$/g, '').trim();
+  }
+  return limpio;
 }
 
 function extraerFotos(resultados) {
@@ -1012,7 +1051,7 @@ async function procesarMensaje(telefono, mensajeUsuario, numeroPrueba = null) {
     return null;
   }
 
-  // Timeout: limpiar si pasaron 60 min sin actividad
+  // Timeout: limpiar si pasaron 120 min sin actividad
   const ahoraTs = Date.now();
   const ultimaAct = ultimaActividad.get(telefono);
   if (ultimaAct && (ahoraTs - ultimaAct) > 120 * 60 * 1000) {
@@ -1100,7 +1139,7 @@ const PALABRAS_NO_CONFIRMACION = ['con débito','con debito','con crédito','con
       messages: historialReciente,
     });
 
-    let textoRespuesta = respuesta.content[0].text;
+    let textoRespuesta = extraerTexto(respuesta);
 
     // Verificar si hay acciones
     let fotosParaEnviar = null;
@@ -1110,12 +1149,16 @@ const PALABRAS_NO_CONFIRMACION = ['con débito','con debito','con crédito','con
       console.log(`🔧 Acciones detectadas:`, textoRespuesta.match(/\[ACCION:(\w+)\]/g));
       resultados = await ejecutarAccionesIA(textoRespuesta, telefono);
       console.log(`🔧 Resultado acciones:`, resultados.substring(0, 200));
-      // Capturar tarifas si hay (solo si no se han enviado ya)
-      if (resultados.includes('RESULTADO_TARIFAS')) {
+      // Capturar tarifas y/o fotos. Pueden venir juntas.
+      const hayTarifas = resultados.includes('RESULTADO_TARIFAS') && resultados.includes('"ok": true');
+      const fotosExtraidas = extraerFotos(resultados);
+      if (hayTarifas && fotosExtraidas) {
+        // Ambas: priorizar tarifas (la foto de precios) y guardar fotos para después
+        fotosParaEnviar = { tarifas: true };
+      } else if (hayTarifas) {
         fotosParaEnviar = { tarifas: true };
       } else {
-        // Capturar fotos si hay
-        fotosParaEnviar = extraerFotos(resultados);
+        fotosParaEnviar = fotosExtraidas;
       }
       let respuestaFinal;
       try {
@@ -1129,7 +1172,7 @@ const PALABRAS_NO_CONFIRMACION = ['con débito','con debito','con crédito','con
             { role: 'user', content: `SISTEMA: Resultados:\n${resultados}\nResponde al cliente sin bloques [ACCION].` },
           ],
         });
-        textoRespuesta = respuestaFinal.content[0].text;
+        textoRespuesta = extraerTexto(respuestaFinal);
       } catch (errFinal) {
         console.error('Error en segunda llamada API:', errFinal.message);
         // Si falla la segunda llamada, armar confirmación con los datos que ya tenemos
@@ -1137,21 +1180,12 @@ const PALABRAS_NO_CONFIRMACION = ['con débito','con debito','con crédito','con
           try {
             const resData = JSON.parse(resultados.match(/RESULTADO_RESERVA: (\{.*\})/)?.[1] || '{}');
             const id = resData.id || '------';
-            const nombre = datos.nombre || '';
-            const motelNombre = datos.motel === 'LeChateaU' || datos.motel?.toLowerCase().includes('chateau') ? 'Le Chateau' : 'Apolo';
-            const tipoLabel = tipo.toLowerCase().includes('jacuzzi') ? 'Jacuzzi' : tipo.toLowerCase().includes('vip') ? 'VIP' : 'Simple';
             const precioStr = resData.precio ? `$${resData.precio.toLocaleString('es-CL')}` : '';
             const inicioDate = resData.inicio ? new Date(resData.inicio).toLocaleString('es-CL', { timeZone: 'America/Santiago', weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : '';
-            textoRespuesta = `Reserva confirmada ${nombre ? `para ${nombre}` : ''} 😊
-🔖 N° ${id}
-🏨 Motel ${motelNombre}
-🛏️ ${tipoLabel}
-📅 ${inicioDate}
-💰 ${precioStr}
-Te esperamos. El pago es en recepción al llegar.`;
+            textoRespuesta = `Reserva confirmada ✅\nN° ${id}${precioStr ? ` — ${precioStr}` : ''}${inicioDate ? `\n📅 ${inicioDate}` : ''}\nPago al llegar (efectivo, débito o crédito). Te esperamos 😊`;
           } catch {
             const idMatch = resultados.match(/"id":"?(\d+)"?/);
-            textoRespuesta = `Reserva confirmada 😊 N° ${idMatch?.[1] || '------'}. Te esperamos.`;
+            textoRespuesta = `Reserva confirmada ✅ N° ${idMatch?.[1] || '------'}. Pago al llegar. Te esperamos 😊`;
           }
         }
       }
@@ -1173,12 +1207,22 @@ Te esperamos. El pago es en recepción al llegar.`;
     // 2. El cliente acaba de dar su nombre pero el bot no creó la reserva (se quedó pegado)
     const dijoConfirmada = /reserva confirmada/i.test(textoRespuesta);
     const ejecutoCrear = textoRespuesta.includes('[ACCION:crear_reserva]') || (resultados && resultados.includes('RESULTADO_RESERVA'));
-    // Detectar si el cliente acaba de dar su nombre (2-4 palabras, sin signos de pregunta, en contexto de reserva)
+    // Detectar si el cliente acaba de dar su nombre.
+    // Enfoque por CONTEXTO: si el ÚLTIMO mensaje del bot pidió el nombre, lo que responda el cliente ES el nombre
+    // (salvo que sea claramente una pregunta o un comando).
     const msgLimpio = mensajeUsuario.trim();
+    const esPregunta = msgLimpio.includes('?') || /^(cuanto|cuánto|que|qué|donde|dónde|como|cómo|cuando|cuándo|tienen|hay|puedo|se puede)/i.test(msgLimpio);
+    const esComando = msgLimpio.startsWith('/');
+    // Excluir agradecimientos, saludos y despedidas — NO son nombres
+    const msgSinSignos = msgLimpio.toLowerCase().replace(/[!¡.,]/g, '').trim();
+    const esCortesia = /^(gracias|muchas gracias|muchismas gracias|mil gracias|ok gracias|vale gracias|listo gracias|perfecto gracias|hola|buenas|buenos dias|buenos días|buenas tardes|buenas noches|chao|adios|adiós|nos vemos|ya|ok|oka|okay|dale|listo|perfecto|bueno|genial|excelente|de acuerdo|entiendo|ya veo|claro)$/i.test(msgSinSignos);
+    // Buscar el último mensaje del asistente en el historial
+    const ultimoMsgBot = [...historialReciente].reverse().find(m => m.role === 'assistant');
+    const ultimoBotPidioNombre = ultimoMsgBot && /nombre completo|tu nombre|me das tu nombre|cuál es tu nombre|cómo te llamas/i.test(typeof ultimoMsgBot.content === 'string' ? ultimoMsgBot.content : '');
+    // Es nombre si: el bot acaba de pedirlo, no es pregunta/comando/cortesía, y tiene largo razonable (2-5 palabras)
     const palabrasMsg = msgLimpio.split(/\s+/).length;
-    const pareceNombre = palabrasMsg >= 2 && palabrasMsg <= 4 && !msgLimpio.includes('?') && /^[a-záéíóúñA-ZÁÉÍÓÚÑ\s]+$/.test(msgLimpio);
-    const botPidioNombre = historialReciente.some(m => m.role === 'assistant' && /nombre completo|tu nombre/i.test(typeof m.content === 'string' ? m.content : ''));
-    const seQuedoPegado = pareceNombre && botPidioNombre && !ejecutoCrear && !dijoConfirmada && !reservasEnProgreso.has(telefono) && !textoRespuesta.includes('[ACCION:');
+    const dioNombre = ultimoBotPidioNombre && !esPregunta && !esComando && !esCortesia && palabrasMsg >= 2 && palabrasMsg <= 5 && msgLimpio.length >= 5;
+    const seQuedoPegado = dioNombre && !ejecutoCrear && !dijoConfirmada && !reservasEnProgreso.has(telefono) && !textoRespuesta.includes('[ACCION:');
 
     if ((dijoConfirmada && !ejecutoCrear && !reservasEnProgreso.has(telefono)) || seQuedoPegado) {
       console.log(`⚠️ ${seQuedoPegado ? 'Bot pegado tras recibir nombre' : 'Confirmación falsa'} para ${telefono} — forzando creación real`);
@@ -1190,10 +1234,10 @@ Te esperamos. El pago es en recepción al llegar.`;
           messages: [
             ...historialReciente,
             { role: 'assistant', content: textoRespuesta },
-            { role: 'user', content: 'SISTEMA: Tienes el nombre del cliente y los datos de la reserva. Si tienes los 5 datos (nombre, motel, tipo, duración, hora exacta), ejecuta [ACCION:crear_reserva] AHORA en este mensaje. Si falta la hora de llegada u otro dato, NO confirmes — pide solo el dato que falta.' },
+            { role: 'user', content: 'SISTEMA: Tienes el nombre del cliente y los datos de la reserva. Si tienes los 5 datos (nombre, motel, tipo, duración, hora exacta), ejecuta [ACCION:crear_reserva] AHORA en este mensaje. Si falta algún dato, pide UNO SOLO en prosa natural (sin listas, sin números, sin negritas). No pidas varios datos a la vez.' },
           ],
         });
-        const textoForzado = forzar.content[0].text;
+        const textoForzado = extraerTexto(forzar);
         if (textoForzado.includes('[ACCION:crear_reserva]')) {
           const resultados2 = await ejecutarAccionesIA(textoForzado, telefono);
           const final2 = await llamarAPI({
@@ -1206,7 +1250,7 @@ Te esperamos. El pago es en recepción al llegar.`;
               { role: 'user', content: `SISTEMA: Resultados:\n${resultados2}\nResponde al cliente sin bloques [ACCION].` },
             ],
           });
-          textoRespuesta = final2.content[0].text;
+          textoRespuesta = extraerTexto(final2);
         } else {
           // El bot pidió un dato faltante en vez de confirmar — usar esa respuesta
           textoRespuesta = textoForzado;
@@ -1214,6 +1258,12 @@ Te esperamos. El pago es en recepción al llegar.`;
       } catch (e) {
         console.error('Error forzando creación:', e.message);
       }
+    }
+
+    // Fallback: si por cualquier razón el texto quedó vacío, no mandar mensaje vacío
+    if (!textoRespuesta || !textoRespuesta.trim()) {
+      console.log(`⚠️ Respuesta vacía para ${telefono} — usando fallback`);
+      textoRespuesta = '¿En qué más podemos ayudarte? 😊';
     }
 
     const respuestaLimpia = limpiarRespuesta(textoRespuesta);
@@ -1288,22 +1338,45 @@ function cargarBloqueos() {
   } catch (e) { console.error('Error cargando bloqueos:', e.message); }
 }
 
+// Normaliza el motel a 'apolo' o 'chateau' (acepta mayúsculas y alias como "lechateau", "le chateau")
+function normalizarMotel(motel) {
+  const m = (motel || '').toLowerCase().trim();
+  if (m === 'todo' || m === 'todos' || m === 'ambos') return 'todo';
+  if (m.includes('chateau') || m.includes('chatau') || m === 'le') return 'chateau';
+  return 'apolo';
+}
+// Normaliza el tipo a 'simple', 'vip' o 'jacuzzi' (acepta mayúsculas)
+function normalizarTipo(tipo) {
+  if (!tipo) return null;
+  const t = tipo.toLowerCase().trim();
+  if (t.includes('jacuzzi') || t.includes('jacuzi') || t.includes('tina')) return 'jacuzzi';
+  if (t.includes('vip')) return 'vip';
+  if (t.includes('simple') || t.includes('normal')) return 'simple';
+  return null; // tipo no reconocido → bloquear todos
+}
+
 function bloquearHabitacion(motel, tipo) {
-  const moteles = motel === 'todo' ? ['apolo', 'chateau'] : [motel];
-  const tipos = tipo ? [tipo] : ['simple', 'vip', 'jacuzzi'];
+  const motelNorm = normalizarMotel(motel);
+  const tipoNorm = normalizarTipo(tipo);
+  const moteles = motelNorm === 'todo' ? ['apolo', 'chateau'] : [motelNorm];
+  const tipos = tipoNorm ? [tipoNorm] : ['simple', 'vip', 'jacuzzi'];
   for (const m of moteles)
     for (const t of tipos)
       bloqueosManuales.set(`${m}_${t}`, true);
   guardarBloqueos();
+  console.log(`🔒 Bloqueado: ${moteles.join(',')} × ${tipos.join(',')}`);
 }
 
 function liberarHabitacion(motel, tipo) {
-  const moteles = motel === 'todo' ? ['apolo', 'chateau'] : [motel];
-  const tipos = tipo ? [tipo] : ['simple', 'vip', 'jacuzzi'];
+  const motelNorm = normalizarMotel(motel);
+  const tipoNorm = normalizarTipo(tipo);
+  const moteles = motelNorm === 'todo' ? ['apolo', 'chateau'] : [motelNorm];
+  const tipos = tipoNorm ? [tipoNorm] : ['simple', 'vip', 'jacuzzi'];
   for (const m of moteles)
     for (const t of tipos)
       bloqueosManuales.delete(`${m}_${t}`);
   guardarBloqueos();
+  console.log(`🔓 Liberado: ${moteles.join(',')} × ${tipos.join(',')}`);
 }
 
 function getEstadoBloqueos() {

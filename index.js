@@ -15,7 +15,7 @@ let botPausado = false;
 let numeroPrueba = null; // Cuando está activo, solo responde a este número
 const pausasPorAdmin = new Map(); // telefono → timestamp de pausa por respuesta admin
 const mensajesProcesados = new Set(); // IDs de mensajes ya procesados para evitar duplicados
-const procesandoCliente = new Map();   // telefono → timeoutId del debounce
+const procesandoCliente = new Map();   // telefono → { timer, cancelar } del debounce
 const mensajesPendientes = new Map();  // telefono → array de textos acumulados
 
 app.get('/', (req, res) => {
@@ -98,7 +98,7 @@ cliente.on('message', async (mensaje) => {
   // Filtrar newsletters, canales y mensajes de sistema que no tienen estructura normal
   if (mensaje.from.includes('@newsletter')) return;
   if (mensaje.type === 'e2e_notification' || mensaje.type === 'notification_template') return;
-  if (!mensaje.from || !mensaje.body === undefined) return;
+  if (!mensaje.from) return;
 
   // Evitar procesar el mismo mensaje dos veces
   const msgId = mensaje.id?.id || mensaje.id?._serialized || '';
@@ -155,7 +155,7 @@ cliente.on('message', async (mensaje) => {
 
   // Algunos números llegan con formato @lid - mapear al número real
   const LID_ADMINS = ['202902928908358', '217274023702535']; // @lid admins
-  const ADMINS = [process.env.ADMIN_NUMERO, '56991655665', '56999644093', '56999644093', ...LID_ADMINS].filter(Boolean);
+  const ADMINS = [process.env.ADMIN_NUMERO, '56991655665', '56999644093', ...LID_ADMINS].filter(Boolean);
 
   // ── Comandos Admin ────────────────────────────────────────
   if (ADMINS.includes(telefono)) {
@@ -199,10 +199,10 @@ cliente.on('message', async (mensaje) => {
     // Comandos de disponibilidad manual
     if (texto.startsWith('/ocupado')) {
       const partes = texto.split(' ');
-      const motel = partes[1] || 'todo';
-      const tipo  = partes[2] || null;
+      const motel = (partes[1] || 'todo').toLowerCase();
+      const tipo  = partes[2] ? partes[2].toLowerCase() : null;
       bloquearHabitacion(motel, tipo);
-      const mn = motel === 'apolo' ? 'Apolo' : motel === 'chateau' ? 'Le Chateau' : 'ambos moteles';
+      const mn = motel.includes('apolo') ? 'Apolo' : motel.includes('chateau') ? 'Le Chateau' : 'ambos moteles';
       const tn = tipo ? ` — ${tipo.charAt(0).toUpperCase()+tipo.slice(1)}` : ' (todas)';
       await mensaje.reply(`❌ Bloqueado: ${mn}${tn}
 Usa /libre para reactivar.`);
@@ -210,10 +210,10 @@ Usa /libre para reactivar.`);
     }
     if (texto.startsWith('/libre')) {
       const partes = texto.split(' ');
-      const motel = partes[1] || 'todo';
-      const tipo  = partes[2] || null;
+      const motel = (partes[1] || 'todo').toLowerCase();
+      const tipo  = partes[2] ? partes[2].toLowerCase() : null;
       liberarHabitacion(motel, tipo);
-      const mn = motel === 'apolo' ? 'Apolo' : motel === 'chateau' ? 'Le Chateau' : 'ambos moteles';
+      const mn = motel.includes('apolo') ? 'Apolo' : motel.includes('chateau') ? 'Le Chateau' : 'ambos moteles';
       const tn = tipo ? ` — ${tipo.charAt(0).toUpperCase()+tipo.slice(1)}` : ' (todas)';
       await mensaje.reply(`✅ Liberado: ${mn}${tn}`);
       return;
@@ -252,18 +252,23 @@ Usa /libre para reactivar.`);
     pausasPorAdmin.delete(telefono); // Limpiar pausa expirada
   }
 
-  // Debounce: acumula mensajes rápidos y los procesa juntos después de 1.5s de silencio
+  // Debounce: acumula mensajes rápidos y los procesa juntos después de 4s de silencio
   if (!mensajesPendientes.has(telefono)) mensajesPendientes.set(telefono, []);
   mensajesPendientes.get(telefono).push(texto);
 
-  if (procesandoCliente.get(telefono)) {
-    clearTimeout(procesandoCliente.get(telefono));
+  // Cancelar el timer anterior y resolver su promesa limpiamente (evita promesas colgadas)
+  const prev = procesandoCliente.get(telefono);
+  if (prev) {
+    clearTimeout(prev.timer);
+    prev.cancelar(); // resuelve la promesa anterior con señal de cancelado
   }
 
-  await new Promise(resolve => {
-    const timer = setTimeout(resolve, 1500);
-    procesandoCliente.set(telefono, timer);
+  const debeContinuar = await new Promise(resolve => {
+    const timer = setTimeout(() => resolve(true), 4000);
+    procesandoCliente.set(telefono, { timer, cancelar: () => resolve(false) });
   });
+  // Si fue cancelado por un mensaje más nuevo, este hilo termina aquí
+  if (!debeContinuar) return;
   procesandoCliente.delete(telefono);
 
   // Tomar todos los mensajes acumulados y unirlos
@@ -277,10 +282,11 @@ Usa /libre para reactivar.`);
     console.log(`📨 Mensajes acumulados de ${telefono}: "${textoFinal}"`);
   }
 
-  const chat = await mensaje.getChat();
-  await chat.sendStateTyping();
-
+  let chat;
   try {
+    chat = await mensaje.getChat();
+    await chat.sendStateTyping();
+
     // Delay variable según largo del mensaje — simula tiempo de lectura humano
     const palabras = (textoFinal || texto).split(' ').length;
     const delayRespuesta = palabras <= 5 ? 2000 : palabras <= 15 ? 3000 : 4000;
@@ -299,7 +305,7 @@ Usa /libre para reactivar.`);
 
     const chatId = mensaje.from;
 
-    // Si la respuesta incluye tarifas, enviar la imagen
+    // Si la respuesta incluye tarifas, enviar la imagen primero y el texto después
     if (respuesta && typeof respuesta === 'object' && respuesta.tarifas) {
       const { MessageMedia } = require('whatsapp-web.js');
       const path = require('path');
@@ -311,6 +317,11 @@ Usa /libre para reactivar.`);
         console.log(`📸 Tarifas enviadas a ${telefono}`);
       } else {
         console.error('❌ No se encontró TARIFAS_APOLO.jpeg');
+      }
+      // Enviar el texto que acompaña (si existe) DESPUÉS de la imagen, con pausa
+      if (respuesta.texto && respuesta.texto.trim()) {
+        await new Promise(r => setTimeout(r, 1500));
+        await cliente.sendMessage(chatId, respuesta.texto);
       }
       await chat.clearState();
       return;
@@ -392,11 +403,16 @@ Usa /libre para reactivar.`);
       console.log(`📤 Respuesta enviada a ${telefono}`);
     }
   } catch (error) {
-    console.error('Error:', error);
-    console.error('Error silencioso — no se respondió al cliente:', error.message);
+    console.error('Error procesando mensaje:', error.message);
+    // Intentar avisar al cliente que hubo un problema (sin dejarlo sin respuesta)
+    try {
+      await cliente.sendMessage(mensaje.from, 'Disculpa, tuvimos un problema técnico. ¿Podrías repetir tu mensaje? 😊');
+    } catch (e2) {
+      console.error('No se pudo enviar mensaje de error al cliente:', e2.message);
+    }
   } finally {
     procesandoCliente.delete(telefono);
-    await chat.clearState();
+    try { if (chat) await chat.clearState(); } catch (e) {}
   }
 });
 
