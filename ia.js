@@ -429,10 +429,11 @@ CAPACIDAD DE HABITACIONES:
 HORARIOS DE ESTADÍA:
 - VALOR NOCHE (22:00 a 12:00): crear reserva directamente. Salida siempre a las 12:00.
 - El cliente puede llegar a CUALQUIER hora entre las 22:00 y las 11:59 — NO necesita hora extra por llegar a las 23:00, 00:00, 01:00, etc. La salida siempre es a las 12:00. NUNCA cobrar hora extra por llegar después de las 22:00.
-- Las horas extras SOLO aplican cuando el cliente quiere llegar ANTES de las 22:00 (a las 20:00 o 21:00).
-- VALOR NOCHE desde 21:30 hasta 21:59: aceptar y crear directamente. Salida a las 12:00.
-- VALOR NOCHE desde 21:00 hasta 21:29: el sistema devolverá NOCHE_SUGERIR_EXTRAS. Ofrecer SIEMPRE automáticamente: "Puedes llegar a las 21:00 con 1 hora extra ($5.000 Simple / $6.000 VIP / $7.000 Jacuzzi) y comenzar la noche a las 22:00. ¿Te parece bien?"
-- VALOR NOCHE desde 20:00 hasta 20:59: el sistema devolverá NOCHE_SUGERIR_EXTRAS. Ofrecer SIEMPRE automáticamente: "Puedes llegar a las 20:00 con 2 horas extras ($10.000 Simple / $12.000 VIP / $14.000 Jacuzzi) y comenzar la noche a las 22:00. ¿Te parece bien?"
+- Las horas extras SOLO aplican cuando el cliente quiere llegar ANTES de las 22:00.
+- VALOR NOCHE desde 21:00 hasta 21:29: el sistema devolverá NOCHE_SUGERIR_EXTRAS con 1 hora extra. Ofrecer SIEMPRE automáticamente: "Para llegar antes de las 22:00 necesitas 1 hora extra ($5.000 Simple / $6.000 VIP / $7.000 Jacuzzi) y la noche comienza igual a las 22:00. ¿Te parece bien?"
+- VALOR NOCHE desde 20:00 hasta 20:59: el sistema devolverá NOCHE_SUGERIR_EXTRAS con 2 horas extra. Ofrecer SIEMPRE automáticamente: "Para llegar antes de las 22:00 necesitas 2 horas extras ($10.000 Simple / $12.000 VIP / $14.000 Jacuzzi) y la noche comienza igual a las 22:00. ¿Te parece bien?"
+- VALOR NOCHE desde 21:30 hasta 21:59: NO crear la reserva todavía. Primero responder al cliente: "El horario de noche parte a las 22:00, ¿te acomoda llegar a esa hora? 😊". Si el cliente acepta, crear la reserva con la entrada a las 22:00. Si prefiere otra cosa, ofrecer 3h, la promo 6x3 o 12 horas.
+- Si el RESULTADO_RESERVA trae "nocheAjustada": true (la reserva se creó y el sistema movió la entrada a las 22:00 porque el cliente había pedido una hora entre 21:30 y 21:59), explicarlo en la confirmación: "El horario de noche parte a las 22:00, así que dejé tu entrada a esa hora 😊".
 - VALOR NOCHE entre 13:00 y 19:59: el sistema devolverá NOCHE_HORA_INVALIDA. Responder: "El horario de noche parte a las 22:00. ¿Te acomoda llegar a esa hora o prefieres 3h, la promo 6x3 o 12 horas?"
 - VALOR NOCHE desde 01:00 hasta 12:00: sugerir 12 horas porque le conviene más. Si insiste en noche, crear igual.
 - 12 HORAS: 12 horas corridas desde cualquier hora. Solo mencionar si el cliente pregunta.
@@ -659,6 +660,7 @@ REGLAS:
 - Si el sistema responde RESERVA_YA_CREADA: significa que ya se creó una reserva en esta conversación. NO crear otra. Responder con la confirmación de la reserva existente usando el ID que retorna.
 - Si el sistema responde DATOS_INCOMPLETOS: falta un dato (hora, nombre o tipo). NO escribir "Reserva confirmada". Pedir amablemente el dato que falta.
 - Si el sistema responde FALTA_HORA: no incluiste la hora de llegada en fechaInicio. NO escribir "Reserva confirmada". Preguntar "¿A qué hora llegarías?" y volver a crear con la fecha y hora completas (formato 2026-MM-DDTHH:MM:00).
+- Si el sistema responde FECHA_INVALIDA: la fecha enviada no es válida. NO confirmes. Pide amablemente al cliente la fecha y hora de llegada de nuevo.
 - Si el sistema responde FALTA_APELLIDO: el cliente dio solo su nombre. NO escribir "Reserva confirmada". Pedir amablemente el apellido: "¿Me das tu apellido también para la reserva? 😊" y luego crear con nombre y apellido completos.
 - Si el sistema responde BLOQUEADO_MANUALMENTE: no hay disponibilidad de ese tipo de habitación en este momento. Informar al cliente y ofrecer otras opciones disponibles.
 - No hay restricción de horario general — se puede reservar a cualquier hora
@@ -808,16 +810,22 @@ async function procesarAccion(accion, datos, telefono) {
       }
 
       // La fecha ya viene validada con hora (FALTA_HORA se rechazó arriba)
-      // Validar hora para noche
+      // Validar que la fecha sea REAL (no una fecha imposible que el modelo pudo inventar)
       const _fechaCheck = parsearFechaSantiago(datos.fechaInicio);
+      if (isNaN(_fechaCheck.getTime())) {
+        return `RESULTADO_RESERVA: {"ok": false, "error": "FECHA_INVALIDA", "mensaje": "La fecha no es válida. Pedir al cliente la fecha y hora de llegada nuevamente."}`;
+      }
+      // Validar hora para noche
       const _localCheck = new Date(_fechaCheck.toLocaleString('en-US', { timeZone: 'America/Santiago' }));
       const _horaCheck = _localCheck.getHours();
       const _minCheck = _localCheck.getMinutes();
       const _minTotalCheck = _horaCheck * 60 + _minCheck;
       if ((datos.tipo || '').toLowerCase().includes('_noche')) {
-        // 21:30 en adelante → aceptar
-        // 20:00 a 21:29 → sugerir horas extras
-        // 13:00 a 19:59 → informar que noche parte a las 22:00
+        // La noche parte a las 22:00.
+        // 13:00 a 19:59 → demasiado temprano (NOCHE_HORA_INVALIDA)
+        // 20:00 a 20:59 → 2 horas extra | 21:00 a 21:29 → 1 hora extra (NOCHE_SUGERIR_EXTRAS)
+        // 21:30 a 21:59 → la noche parte a las 22:00; se ajusta la entrada a esa hora (sin extra)
+        // 22:00-23:59 y 00:00-11:59 → aceptar noche directamente
         if (_minTotalCheck >= 13*60 && _minTotalCheck < 20*60) {
           return `RESULTADO_RESERVA: {"ok": false, "error": "NOCHE_HORA_INVALIDA", "hora": ${_horaCheck}}`;
         }
@@ -825,7 +833,12 @@ async function procesarAccion(accion, datos, telefono) {
           const extrasRecomendadas = _minTotalCheck < 21*60 ? 2 : 1;
           return `RESULTADO_RESERVA: {"ok": false, "error": "NOCHE_SUGERIR_EXTRAS", "hora": ${_horaCheck}, "minutos": ${_minCheck}, "extrasRecomendadas": ${extrasRecomendadas}}`;
         }
-        // 21:30 en adelante y 00:00-12:00 → aceptar noche
+        if (_minTotalCheck >= 21*60 + 30 && _minTotalCheck < 22*60) {
+          const datePart = datos.fechaInicio.split('T')[0];
+          datos.fechaInicio = `${datePart}T22:00:00`;
+          datos._nocheAjustada = true; // la noche parte a las 22:00; informar al cliente
+        }
+        // 22:00-23:59 y 00:00-11:59 → aceptar noche directamente
       }
 
       // Corregir tipo automáticamente según fecha real Santiago
@@ -847,8 +860,13 @@ async function procesarAccion(accion, datos, telefono) {
       if (personas === 3) precio = precio * 2;
 
       // Verificación de disponibilidad ÚNICA y correcta (con motel y tipo, y duración ya corregida).
-      // Si ya se confirmó disponibilidad antes en esta conversación, se confía en eso y no se reverifica.
-      if (!disponibilidadConfirmada.get(telefono)) {
+      // Solo se confía en una disponibilidad previa si es para LA MISMA habitación y fecha (evita sobrecupo).
+      const dispPrev = disponibilidadConfirmada.get(telefono);
+      const mismaHab = dispPrev &&
+        (dispPrev.motel || '').toLowerCase() === (datos.motel || '').toLowerCase() &&
+        (dispPrev.tipo || '').toLowerCase() === (datos.tipo || '').toLowerCase() &&
+        (dispPrev.fecha || '') === (datos.fechaInicio || '');
+      if (!mismaHab) {
         const disp = await consultarDisponibilidad(datos.fechaInicio, duracionHoras, datos.motel || '', datos.tipo || '');
         if (!disp.hayDisponibilidad) {
           return 'RESULTADO_RESERVA: {"ok": false, "error": "Sin disponibilidad en ese horario"}';
@@ -861,8 +879,13 @@ async function procesarAccion(accion, datos, telefono) {
       // Si es modificación, recuperar y borrar reserva anterior
       let reservaIdExistente = null;
       let googleEventIdExistente = null;
-      if (datos.esModificacion && datos.reservaIdAnterior) {
-        const anterior = reservasConfirmadas.get(datos.reservaIdAnterior);
+      if (datos.esModificacion) {
+        // Buscar por el ID que mandó el modelo; si no llega o no existe, usar la reserva actual del cliente
+        let anterior = datos.reservaIdAnterior ? reservasConfirmadas.get(datos.reservaIdAnterior) : null;
+        if (!anterior) {
+          const idActual = reservasEnProgreso.get(telefono);
+          if (idActual) anterior = reservasConfirmadas.get(idActual);
+        }
         if (anterior) {
           reservaIdExistente = anterior.id;
           googleEventIdExistente = anterior.googleEventId;
@@ -896,7 +919,7 @@ Datos: ${datos.motel} | ${tipoLabel} | ${datos.fechaInicio} | $${precio.toLocale
           );
         }
       }
-      return `RESULTADO_RESERVA: ${JSON.stringify({ ...result, precio })}`;
+      return `RESULTADO_RESERVA: ${JSON.stringify({ ...result, precio, nocheAjustada: datos._nocheAjustada || false })}`;
     }
     case 'cancelar_reserva': {
       const result = await cancelarReserva(datos.reservaId);
@@ -1075,11 +1098,17 @@ const PALABRAS_NO_CONFIRMACION = ['con débito','con debito','con crédito','con
   // Palabras de agradecimiento — NO son confirmación de reserva
   const PALABRAS_AGRADECIMIENTO = ['gracias','muchas gracias','muy amable','te pasaste','genial gracias'];
   const msgLowerConfirm = msgNormalizado.toLowerCase().trim().replace(/[!¡.]/g,'');
-  const esAgradecimiento = PALABRAS_AGRADECIMIENTO.some(p => msgLowerConfirm.includes(p));
+  const palabrasConfirm = msgLowerConfirm.split(/\s+/);
+  // Coincidencia por PALABRA COMPLETA (evita que "casi"/"necesito" cuenten por contener "si")
+  // Para frases de varias palabras (ej "de acuerdo") sí se busca como subcadena.
+  const coincidePalabra = (lista) => lista.some(p =>
+    p.includes(' ') ? msgLowerConfirm.includes(p) : (msgLowerConfirm === p || palabrasConfirm.includes(p))
+  );
+  const esAgradecimiento = coincidePalabra(PALABRAS_AGRADECIMIENTO);
   const esPago = PALABRAS_NO_CONFIRMACION.some(p => msgLowerConfirm.includes(p));
   // Si ya hay reserva creada para este cliente, NO contar como confirmación
   const yaTieneReserva = reservasEnProgreso.has(telefono);
-  const esConfirmacion = !esPago && !esAgradecimiento && !yaTieneReserva && PALABRAS_CONFIRMACION.some(p => msgLowerConfirm === p || msgLowerConfirm.includes(p));
+  const esConfirmacion = !esPago && !esAgradecimiento && !yaTieneReserva && coincidePalabra(PALABRAS_CONFIRMACION);
   if (esConfirmacion) {
     const veces = (confirmacionesPendientes.get(telefono) || 0) + 1;
     confirmacionesPendientes.set(telefono, veces);
@@ -1162,6 +1191,12 @@ const PALABRAS_NO_CONFIRMACION = ['con débito','con debito','con crédito','con
       }
       let respuestaFinal;
       try {
+        // Instrucción context-aware: si se verificó disponibilidad y HAY cupo, permitir crear la reserva en el mismo turno
+        let instruccionFinal = `SISTEMA: Resultados:\n${resultados}\nResponde al cliente sin bloques [ACCION].`;
+        const dispPositiva = resultados.includes('RESULTADO_DISPONIBILIDAD') && (resultados.includes('"hayDisponibilidad":true') || resultados.includes('"hayDisponibilidad": true'));
+        if (dispPositiva) {
+          instruccionFinal = `SISTEMA: Resultados:\n${resultados}\nHay disponibilidad. Si ya tienes los 5 datos (nombre, motel, tipo, duración, hora exacta), ejecuta [ACCION:crear_reserva] AHORA en este mismo mensaje. Si falta algún dato, pídelo en prosa natural (sin listas, sin números) y SIN usar [ACCION].`;
+        }
         respuestaFinal = await llamarAPI({
           model: 'claude-sonnet-4-6',
           max_tokens: 1000,
@@ -1169,10 +1204,27 @@ const PALABRAS_NO_CONFIRMACION = ['con débito','con debito','con crédito','con
           messages: [
             ...historialReciente,
             { role: 'assistant', content: textoRespuesta },
-            { role: 'user', content: `SISTEMA: Resultados:\n${resultados}\nResponde al cliente sin bloques [ACCION].` },
+            { role: 'user', content: instruccionFinal },
           ],
         });
         textoRespuesta = extraerTexto(respuestaFinal);
+        // Si tras verificar disponibilidad el modelo ahora SÍ crea la reserva, ejecutarla y confirmar
+        if (textoRespuesta.includes('[ACCION:crear_reserva]')) {
+          console.log(`🔧 Creando reserva tras verificar disponibilidad para ${telefono}`);
+          const resultados2 = await ejecutarAccionesIA(textoRespuesta, telefono);
+          resultados += '\n' + resultados2;
+          const tercera = await llamarAPI({
+            model: 'claude-sonnet-4-6',
+            max_tokens: 1000,
+            system: getSystemPrompt() + bloqueosTexto + tarifasTexto,
+            messages: [
+              ...historialReciente,
+              { role: 'assistant', content: textoRespuesta },
+              { role: 'user', content: `SISTEMA: Resultados:\n${resultados2}\nResponde al cliente con la confirmación de la reserva, sin bloques [ACCION].` },
+            ],
+          });
+          textoRespuesta = extraerTexto(tercera);
+        }
       } catch (errFinal) {
         console.error('Error en segunda llamada API:', errFinal.message);
         // Si falla la segunda llamada, armar confirmación con los datos que ya tenemos
@@ -1218,7 +1270,7 @@ const PALABRAS_NO_CONFIRMACION = ['con débito','con debito','con crédito','con
     const esCortesia = /^(gracias|muchas gracias|muchismas gracias|mil gracias|ok gracias|vale gracias|listo gracias|perfecto gracias|hola|buenas|buenos dias|buenos días|buenas tardes|buenas noches|chao|adios|adiós|nos vemos|ya|ok|oka|okay|dale|listo|perfecto|bueno|genial|excelente|de acuerdo|entiendo|ya veo|claro)$/i.test(msgSinSignos);
     // Buscar el último mensaje del asistente en el historial
     const ultimoMsgBot = [...historialReciente].reverse().find(m => m.role === 'assistant');
-    const ultimoBotPidioNombre = ultimoMsgBot && /nombre completo|tu nombre|me das tu nombre|cuál es tu nombre|cómo te llamas/i.test(typeof ultimoMsgBot.content === 'string' ? ultimoMsgBot.content : '');
+    const ultimoBotPidioNombre = ultimoMsgBot && /nombre completo|tu nombre|me das tu nombre|cuál es tu nombre|cómo te llamas|tu apellido|me das tu apellido|apellido/i.test(typeof ultimoMsgBot.content === 'string' ? ultimoMsgBot.content : '');
     // Es nombre si: el bot acaba de pedirlo, no es pregunta/comando/cortesía, y tiene largo razonable (2-5 palabras)
     const palabrasMsg = msgLimpio.split(/\s+/).length;
     const dioNombre = ultimoBotPidioNombre && !esPregunta && !esComando && !esCortesia && palabrasMsg >= 2 && palabrasMsg <= 5 && msgLimpio.length >= 5;
