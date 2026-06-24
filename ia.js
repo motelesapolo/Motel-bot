@@ -163,14 +163,14 @@ function getSystemPrompt() {
   const anioActual = ahora.getFullYear();
   const saludo = getSaludo();
 
-  // Generar calendario de los próximos 60 días en Santiago para evitar errores de fechas
+  // Generar calendario de los próximos 32 días en Santiago para evitar errores de fechas
   const diasSemana = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
   const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
   
   // Obtener fecha actual en Santiago correctamente
   const fechaSantiago = new Date(ahora.toLocaleString('en-US', {timeZone: 'America/Santiago'}));
-  let calendarioPróximos = 'CALENDARIO PRÓXIMOS 60 DÍAS (usa esto para calcular fechas, NO tu propio cálculo):\n';
-  for (let i = 0; i < 60; i++) {
+  let calendarioPróximos = 'CALENDARIO PRÓXIMOS 32 DÍAS (usa esto para calcular fechas, NO tu propio cálculo):\n';
+  for (let i = 0; i < 32; i++) {
     const d = new Date(fechaSantiago);
     d.setDate(fechaSantiago.getDate() + i);
     const dDate = new Date(d.toLocaleString('en-US', {timeZone: 'America/Santiago'}));
