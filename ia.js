@@ -293,7 +293,7 @@ IMPORTANTE SOBRE EL ACCESO:
 - Solo mencionar el pasillo interno entre Apolo y Le Chateau si el cliente pregunta específicamente cómo llegar desde el estacionamiento a Apolo
 
 INFORMACIÓN DE HABITACIONES Y SERVICIOS:
-- Máximo 3 personas por habitación. Si son 3 personas el precio es el doble (ej: habitación de $27.000 → $54.000 para 3 personas)
+- Máximo 3 personas por habitación. Si son 3 personas el precio es el doble (ej: habitación de $29.000 → $58.000 para 3 personas)
 - Todas las habitaciones incluyen: ducha y baño privado, jabón, 2 toallas, cortesía
 - Las habitaciones con Jacuzzi incluyen 4 toallas
 - Shampoo, acondicionador y kit dental se cobran aparte
@@ -326,14 +326,14 @@ RECLAMOS Y CONTACTO DIRECTO:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 TARIFA SEMANA (domingo 8:00 AM a viernes 7:59 AM):
-🏠 Simple:  3h/6x3 $27.000 | Noche $35.000 | 12h $35.000 | 24h $55.000
-⭐ VIP:     3h/6x3 $32.000 | Noche $42.000 | 12h $42.000 | 24h $65.000
-🛁 Jacuzzi: 3h/6x3 $40.000 | Noche $51.000 | 12h $51.000 | 24h $75.000
+🏠 Simple:  3h/6x3 $29.000 | Noche $37.000 | 12h $37.000 | 24h $60.000
+⭐ VIP:     3h/6x3 $34.000 | Noche $44.000 | 12h $44.000 | 24h $70.000
+🛁 Jacuzzi: 3h/6x3 $42.000 | Noche $55.000 | 12h $55.000 | 24h $80.000
 
 TARIFA FIN DE SEMANA (viernes 8:00 AM a domingo 7:59 AM, y vísperas de feriado):
-🏠 Simple:  3h/6x3 $29.000 | Noche $39.000 | 12h $39.000 | 24h $55.000
-⭐ VIP:     3h/6x3 $37.000 | Noche $46.000 | 12h $46.000 | 24h $65.000
-🛁 Jacuzzi: 3h/6x3 $44.000 | Noche $53.000 | 12h $53.000 | 24h $75.000
+🏠 Simple:  3h/6x3 $31.000 | Noche $41.000 | 12h $41.000 | 24h $60.000
+⭐ VIP:     3h/6x3 $39.000 | Noche $48.000 | 12h $48.000 | 24h $70.000
+🛁 Jacuzzi: 3h/6x3 $46.000 | Noche $58.000 | 12h $58.000 | 24h $80.000
 
 IMPORTANTE: El precio de 3h y 6x3 es fijo — no cambia según la hora del día. Solo varía entre semana y fin de semana.
 NOTA: Noche y 12 horas tienen el mismo precio pero son paquetes distintos. Noche: entrada 22:00-12:00, salida siempre 12:00. 12 horas: 12h corridas desde cualquier hora.
@@ -341,7 +341,7 @@ NOTA: Noche y 12 horas tienen el mismo precio pero son paquetes distintos. Noche
 
 
 PRECIO PARA 3 PERSONAS: El doble del precio normal.
-Ejemplo: Simple semana 3h normalmente $27.000 → con 3 personas $54.000
+Ejemplo: Simple semana 3h normalmente $29.000 → con 3 personas $58.000
 
 PROMOCIÓN 6x3 (EXCLUSIVA NUESTRA):
 - Pagas el valor de un momento (3h) y te quedas 6 horas (3 horas de regalo)
@@ -649,11 +649,11 @@ REGLAS:
 - NUNCA digas "procedo a crear tu reserva", "voy a crear tu reserva" o similares sin incluir [ACCION:crear_reserva] en el mismo mensaje.
 - Al informar el precio al cliente SIEMPRE usar el precio correcto según la fecha: semana (dom 8AM - vie 7:59AM) o fin de semana (vie 8AM - dom 7:59AM).
 - IMPORTANTE: Si el cliente pregunta el precio ANTES de dar la fecha, NO asumas tarifa semana. Pregunta primero la fecha, o aclara "el precio depende del día". NUNCA des un precio de semana y luego lo cambies.
-- AL COTIZAR DI LA TARIFA DE FORMA DIRECTA Y SEGURA, sin mostrar tu razonamiento. NUNCA te corrijas a mitad de mensaje ni escribas dudas como "espera", "aplica tarifa de semana... pero", "déjame ver". Simplemente di el resultado: "El viernes a las 9:00 AM es tarifa fin de semana, el jacuzzi 6x3 cuesta $44.000 😊".
+- AL COTIZAR DI LA TARIFA DE FORMA DIRECTA Y SEGURA, sin mostrar tu razonamiento. NUNCA te corrijas a mitad de mensaje ni escribas dudas como "espera", "aplica tarifa de semana... pero", "déjame ver". Simplemente di el resultado: "El viernes a las 9:00 AM es tarifa fin de semana, el jacuzzi 6x3 cuesta $46.000 😊".
 - REGLA CLARA DEL FIN DE SEMANA: va del VIERNES 8:00 AM al DOMINGO 7:59 AM. Por lo tanto el viernes DESDE las 8:00 AM (incluyendo 8:00, 9:00, 10:00 AM y toda la mañana) YA es fin de semana. El viernes solo es tarifa semana ANTES de las 8:00 AM. No te confundas con esto.
-- En la CONFIRMACIÓN de reserva, usa SIEMPRE el precio que entrega el sistema en RESULTADO_RESERVA (campo precio). NUNCA escribas un precio distinto al que devuelve el sistema. Si el sistema dice $53.000, escribe $53.000, no otro valor.
+- En la CONFIRMACIÓN de reserva, usa SIEMPRE el precio que entrega el sistema en RESULTADO_RESERVA (campo precio). NUNCA escribas un precio distinto al que devuelve el sistema. Si el sistema dice $58.000, escribe $58.000, no otro valor.
 - VÍSPERA DE FERIADO: el día anterior a un feriado desde las 8AM se cobra como fin de semana. Ejemplo: si el feriado es el jueves 21, el miércoles 20 desde las 8AM es tarifa finde.
-- MADRUGADA DE VÍSPERA: si la reserva es para la madrugada (00:00 a 07:59) del día feriado, también es tarifa finde porque es continuación de la víspera. Ejemplo: jueves 21 a la 01:00 AM → tarifa finde $29.000 (no $27.000).
+- MADRUGADA DE VÍSPERA: si la reserva es para la madrugada (00:00 a 07:59) del día feriado, también es tarifa finde porque es continuación de la víspera. Ejemplo: jueves 21 a la 01:00 AM → tarifa finde $31.000 (no $29.000).
 - El feriado mismo desde las 8AM → semana (a menos que caiga viernes o sábado).
 - En caso de duda sobre si es semana o finde, usar SIEMPRE tarifa finde para no cobrar de menos. Si tienes todos los datos, ejecuta la acción directamente sin anunciarlo.
 - NUNCA digas "tu reserva ha sido modificada", "el cambio fue exitoso" o similares sin haber ejecutado [ACCION:crear_reserva] con esModificacion: true en el mismo mensaje. Si tienes todos los datos para modificar, ejecuta la acción directamente.
@@ -679,12 +679,12 @@ REGLAS:
 
 // ── Tabla de precios y duraciones ────────────────────────────
 const PRECIOS = {
-  simple_3h_semana: 27000, simple_6x3_semana: 27000, simple_noche_semana: 35000, simple_12h_semana: 35000, simple_24h: 55000,
-  simple_3h_finde:  29000, simple_6x3_finde:  29000, simple_noche_finde:  39000, simple_12h_finde: 39000,
-  vip_3h_semana:    32000, vip_6x3_semana:    32000, vip_noche_semana:    42000, vip_12h_semana: 42000, vip_24h: 65000,
-  vip_3h_finde:     37000, vip_6x3_finde:     37000, vip_noche_finde:     46000, vip_12h_finde: 46000,
-  jacuzzi_3h_semana: 40000, jacuzzi_6x3_semana: 40000, jacuzzi_noche_semana: 51000, jacuzzi_12h_semana: 51000, jacuzzi_24h: 75000,
-  jacuzzi_3h_finde:  44000, jacuzzi_6x3_finde:  44000, jacuzzi_noche_finde:  53000, jacuzzi_12h_finde: 53000,
+  simple_3h_semana: 29000, simple_6x3_semana: 29000, simple_noche_semana: 37000, simple_12h_semana: 37000, simple_24h: 60000,
+  simple_3h_finde:  31000, simple_6x3_finde:  31000, simple_noche_finde:  41000, simple_12h_finde: 41000,
+  vip_3h_semana:    34000, vip_6x3_semana:    34000, vip_noche_semana:    44000, vip_12h_semana: 44000, vip_24h: 70000,
+  vip_3h_finde:     39000, vip_6x3_finde:     39000, vip_noche_finde:     48000, vip_12h_finde: 48000,
+  jacuzzi_3h_semana: 42000, jacuzzi_6x3_semana: 42000, jacuzzi_noche_semana: 55000, jacuzzi_12h_semana: 55000, jacuzzi_24h: 80000,
+  jacuzzi_3h_finde:  46000, jacuzzi_6x3_finde:  46000, jacuzzi_noche_finde:  58000, jacuzzi_12h_finde: 58000,
 };
 
 const DURACIONES = {
@@ -864,7 +864,7 @@ async function procesarAccion(accion, datos, telefono) {
         }
       }
       const duracionHoras = DURACIONES[tipo] || 3;
-      let precio = PRECIOS[tipo] || 27000;
+      let precio = PRECIOS[tipo] || 29000;
       const personas = datos.personas || 2;
       if (personas === 3) precio = precio * 2;
 
