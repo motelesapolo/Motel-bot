@@ -239,6 +239,7 @@ No des explicaciones largas. Concreta rápido.` : ''}
   ✅ "¿Tienen estacionamiento?" → "Sí, gratuito en Marín 021 😊"
   ✅ Cliente dice "esta noche en Apolo" → preguntar solo el tipo de habitación
   ✅ Cliente dice "la noche desde las 23:00" → crear reserva directamente, no explicar el paquete
+  ✅ Cliente dice "noche, llego a las 00:00" → crear la reserva directamente, salida 12:00, SIN explicar el horario
   ❌ Cliente dice "la noche" → listar 3h, noche y 24h con precios
   ❌ Cliente dice "en Apolo" → volver a preguntar el motel
 - RESUMEN DE RESERVA: incluir toda la info relevante pero sin asteriscos, sin bullets, sin negritas. Formato limpio:
@@ -433,15 +434,15 @@ CAPACIDAD DE HABITACIONES:
 - Si tampoco hay disponibilidad en el otro motel, decir: "Lo sentimos, no tenemos disponibilidad para ese horario. Te invitamos a llamarnos directamente al ${process.env.MOTEL_TELEFONO} (Apolo anexo 710 / Le Chateau anexo 210) para revisar opciones o hablar con un agente."
 
 HORARIOS DE ESTADÍA:
-- VALOR NOCHE (22:00 a 12:00): crear reserva directamente. Salida siempre a las 12:00.
-- El cliente puede llegar a CUALQUIER hora entre las 22:00 y las 11:59 — NO necesita hora extra por llegar a las 23:00, 00:00, 01:00, etc. La salida siempre es a las 12:00. NUNCA cobrar hora extra por llegar después de las 22:00.
+- VALOR NOCHE de 22:00 a 00:00 (medianoche): crear la reserva de INMEDIATO, a cualquier hora de ese rango (22:00, 23:00, 23:30, 00:00). Salida siempre a las 12:00. NUNCA le expliques el horario de la noche ni le digas "el paquete de noche es de 22:00 a 12:00" — solo acepta y crea la reserva. El cliente sabe que llega tarde y le acomoda.
+- El cliente puede llegar tarde sin pagar hora extra. La salida siempre es a las 12:00. NUNCA cobrar hora extra por llegar después de las 22:00.
 - Las horas extras SOLO aplican cuando el cliente quiere llegar ANTES de las 22:00.
 - VALOR NOCHE desde 21:00 hasta 21:29: el sistema devolverá NOCHE_SUGERIR_EXTRAS con 1 hora extra. Ofrecer SIEMPRE automáticamente: "Para llegar antes de las 22:00 necesitas 1 hora extra ($5.000 Simple / $6.000 VIP / $7.000 Jacuzzi) y la noche comienza igual a las 22:00. ¿Te parece bien?"
 - VALOR NOCHE desde 20:00 hasta 20:59: el sistema devolverá NOCHE_SUGERIR_EXTRAS con 2 horas extra. Ofrecer SIEMPRE automáticamente: "Para llegar antes de las 22:00 necesitas 2 horas extras ($10.000 Simple / $12.000 VIP / $14.000 Jacuzzi) y la noche comienza igual a las 22:00. ¿Te parece bien?"
 - VALOR NOCHE desde 21:30 hasta 21:59: NO crear la reserva todavía. Primero responder al cliente: "El horario de noche parte a las 22:00, ¿te acomoda llegar a esa hora? 😊". Si el cliente acepta, crear la reserva con la entrada a las 22:00. Si prefiere otra cosa, ofrecer 3h, la promo 6x3 o 12 horas.
 - Si el RESULTADO_RESERVA trae "nocheAjustada": true (la reserva se creó y el sistema movió la entrada a las 22:00 porque el cliente había pedido una hora entre 21:30 y 21:59), explicarlo en la confirmación: "El horario de noche parte a las 22:00, así que dejé tu entrada a esa hora 😊".
 - VALOR NOCHE entre 13:00 y 19:59: el sistema devolverá NOCHE_HORA_INVALIDA. Responder: "El horario de noche parte a las 22:00. ¿Te acomoda llegar a esa hora o prefieres 3h, la promo 6x3 o 12 horas?"
-- VALOR NOCHE desde 01:00 hasta 12:00: sugerir 12 horas porque le conviene más. Si insiste en noche, crear igual.
+- VALOR NOCHE pasada la medianoche (después de las 00:00, o sea de la 01:00 en adelante): en vez de noche, sugerir 12 horas porque le conviene más (mismo precio, más tiempo, ya que la noche sale igual a las 12:00). Si el cliente prefiere noche igual, crearla sin problema.
 - 12 HORAS: 12 horas corridas desde cualquier hora. Solo mencionar si el cliente pregunta.
 - 3 HORAS y 6x3: cualquier hora, sin cambios.
 - 24 HORAS: cualquier hora, sin cambios.
@@ -503,10 +504,16 @@ MODIFICACIÓN Y CANCELACIÓN DE RESERVAS:
 - Si el código tiene letras y números (ej: AB1234, MN-456X) → es de MotelNow. Decirle: "Esa reserva fue hecha por MotelNow, debes modificarla o cancelarla directamente con ellos."
 - Si el código es de 6 dígitos numéricos → es nuestra, proceder:
 1. Confirmar qué quiere cambiar
-2. Recopilar los nuevos datos
-3. Usar accion "crear_reserva" con los campos "esModificacion": true y "reservaIdAnterior": "NÚMERO_RESERVA"
-   Ejemplo: {"nombre": "Juan", "fechaInicio": "...", "tipo": "...", "motel": "...", "esModificacion": true, "reservaIdAnterior": "123456"}
-4. El sistema borrará la reserva anterior de Google Calendar y mantendrá el MISMO número de reserva
+2. Usar accion "crear_reserva" con "esModificacion": true y "reservaIdAnterior": "NÚMERO_RESERVA"
+3. IMPORTANTE — NO necesitas recordar ni preguntar los datos originales de la reserva (nombre, tipo, motel, fecha). El SISTEMA los tiene guardados. En la acción, incluye SOLO los campos que el cliente quiere CAMBIAR. Los que no incluyas, el sistema los mantiene igual que en la reserva original.
+   - Si solo cambia la HORA o la FECHA → manda solo "fechaInicio" (con la nueva fecha/hora). NO mandes tipo, nombre ni motel.
+     Ejemplo: {"fechaInicio": "2026-07-01T00:30:00", "esModificacion": true, "reservaIdAnterior": "123456"}
+   - Si cambia el TIPO de habitación → manda solo "tipo". NO mandes fecha ni los demás.
+     Ejemplo: {"tipo": "jacuzzi_noche_semana", "esModificacion": true, "reservaIdAnterior": "123456"}
+   - Si cambia VARIAS cosas (ej: fecha Y tipo) → manda solo esos campos.
+     Ejemplo: {"fechaInicio": "2026-07-05T22:00:00", "tipo": "vip_noche_semana", "esModificacion": true, "reservaIdAnterior": "123456"}
+   - Si el cliente dice "todo igual" o solo cambia la hora/fecha, NUNCA vuelvas a preguntar el tipo, nombre o motel: el sistema ya los tiene.
+4. El sistema borrará la reserva anterior de Google Calendar, aplicará los cambios, recalculará el precio correcto y mantendrá el MISMO número de reserva
 - Si el cliente tiene más de una reserva, preguntarle el número de la reserva que desea modificar o cancelar
 
 LLEGADA TARDE: Si un cliente dice que llegará más tarde de la hora reservada:
@@ -793,6 +800,22 @@ async function procesarAccion(accion, datos, telefono) {
       return `RESULTADO_DISPONIBILIDAD: ${JSON.stringify(result)}`;
     }
     case 'crear_reserva': {
+      // MODIFICACIÓN VERSÁTIL: partir de la reserva ORIGINAL y aplicar solo los cambios que el cliente pidió.
+      // Regla: si el modelo mandó un campo, es un cambio que el cliente quiere → se usa ese valor nuevo.
+      //        si el modelo NO mandó un campo (no cambió, o el modelo lo olvidó) → se usa el valor ORIGINAL.
+      // Así el bot maneja cualquier combinación de cambios (hora, fecha, tipo, motel, o varios juntos)
+      // sin cobrar mal ni depender de que el modelo recuerde todos los datos originales.
+      if (datos.esModificacion) {
+        const _idOrig = datos.reservaIdAnterior || reservasEnProgreso.get(telefono);
+        const _orig = _idOrig ? reservasConfirmadas.get(_idOrig) : null;
+        if (_orig) {
+          if ((!datos.tipo || datos.tipo === '') && _orig.tipoInterno) datos.tipo = _orig.tipoInterno;
+          if ((!datos.fechaInicio || datos.fechaInicio === '') && _orig.fechaInicio) datos.fechaInicio = _orig.fechaInicio;
+          if ((!datos.nombre || datos.nombre === '') && _orig.nombre) datos.nombre = _orig.nombre;
+          if ((!datos.motel || datos.motel === '') && _orig.motel) datos.motel = _orig.motel;
+          console.log(`🔧 Modificación reserva ${_idOrig}: base original + cambios → tipo=${datos.tipo}, fecha=${datos.fechaInicio}`);
+        }
+      }
       // VALIDACIÓN: no crear reserva sin datos esenciales (especialmente la hora)
       if (!datos.fechaInicio || !datos.nombre || !datos.tipo) {
         return `RESULTADO_RESERVA: {"ok": false, "error": "DATOS_INCOMPLETOS", "mensaje": "Falta la hora de llegada, el nombre o el tipo de habitación. Pedir el dato faltante antes de crear."}`;
@@ -917,7 +940,14 @@ async function procesarAccion(accion, datos, telefono) {
       });
       if (result.ok) {
         reservasEnProgreso.set(telefono, result.id);
-        reservasConfirmadas.set(result.id, { id: result.id, googleEventId: result.googleEventId });
+        reservasConfirmadas.set(result.id, {
+          id: result.id,
+          googleEventId: result.googleEventId,
+          tipoInterno: tipo,              // tipo interno completo (habitación+duración+tarifa)
+          nombre: datos.nombre,
+          motel: datos.motel || 'Apolo',
+          duracionHoras,
+        });
         const tipoBase = tipo.replace(/_semana$|_finde$|_24h$/, '').replace(/_noche$/, '');
         preferenciaCliente.set(telefono, tipoBase);
         await notificarEmpresa(datos, result, tipo, precio, duracionHoras, telefono);

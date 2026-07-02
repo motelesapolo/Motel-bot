@@ -327,6 +327,20 @@ function formatearFecha(fecha) {
 }
 
 // ── Cargar reservas recientes desde Sheets al iniciar ────────
+// Convierte la etiqueta guardada (ej: "simple noche (semana)") al tipo interno
+// para poder recalcular el precio al modificar (ej: "simple_noche"). La tarifa
+// (semana/finde) se agrega después según la fecha nueva de la modificación.
+function labelATipoInterno(label) {
+  const l = (label || '').toLowerCase();
+  const room = l.includes('jacuzzi') ? 'jacuzzi' : (l.includes('vip') ? 'vip' : 'simple');
+  if (l.includes('24')) return room + '_24h';
+  let dur = '3h';
+  if (l.includes('noche')) dur = 'noche';
+  else if (l.includes('12')) dur = '12h';
+  else if (l.includes('6x3') || l.includes('6 x 3')) dur = '6x3';
+  return room + '_' + dur;
+}
+
 async function cargarReservasDesdeSheets() {
   const SHEET_ID = process.env.GOOGLE_SHEET_ID;
   if (!SHEET_ID) return new Map();
@@ -344,7 +358,20 @@ async function cargarReservasDesdeSheets() {
       const reservaId = fila[1];
       const googleEventId = fila[11];
       if (reservaId && googleEventId) {
-        mapa.set(reservaId, { id: reservaId, googleEventId });
+        // Guardar TODOS los datos de la reserva (no solo id y googleEventId),
+        // para poder recuperarlos al modificar sin depender de la memoria del modelo.
+        const tipoLabel = fila[5] || '';
+        mapa.set(reservaId, {
+          id: reservaId,
+          googleEventId,
+          nombre: fila[2] || '',
+          motel: fila[4] || '',
+          tipoLabel: tipoLabel,
+          tipoInterno: labelATipoInterno(tipoLabel),
+          duracionHoras: fila[7] || '',
+          fechaInicio: fila[6] || '',
+          precio: fila[8] || '',
+        });
       }
     }
     console.log(`📋 ${mapa.size} reservas cargadas desde Sheets`);
