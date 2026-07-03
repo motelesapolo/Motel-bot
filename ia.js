@@ -529,6 +529,13 @@ NÚMERO DE HABITACIÓN: No se asigna número de habitación al momento de la res
 - Solo transferir si el cliente lo pide EXPLÍCITAMENTE. No mencionarlo de forma proactiva.
 - AL APLICAR ESTA REGLA usa EXACTAMENTE la frase indicada y NADA MÁS. NUNCA expliques la hora, la "regla de día", ni por qué transfieres. PROHIBIDO escribir cosas como "la hora actual es las 2:29 PM", "aplica la regla de día", "como es entre 9:00 AM y 22:59 PM", "debo transferir a un agente". El cliente solo debe ver la frase amable, nada de la lógica interna.
 
+OBJETOS PERDIDOS U OLVIDADOS: Si el cliente consulta por algo que perdió, olvidó o se le quedó en el motel (carnet, cédula de identidad, celular, billetera, llaves, ropa, cargador, aros, o cualquier objeto), aplicar EXACTAMENTE la misma lógica según la hora ACTUAL en Santiago:
+  * 9:00 AM a 22:59 PM → responder: "Con gusto te ayudo, un ejecutivo te atenderá en breve 😊" y usar [TRANSFERIR_AGENTE]
+  * 23:00 PM a 8:59 AM → responder: "En este momento no tenemos agentes disponibles. Puedes llamarnos al ${process.env.MOTEL_TELEFONO} o escribirnos desde las 9:00 😊" — NO usar [TRANSFERIR_AGENTE]
+- NUNCA digas si el objeto está o no está (no lo sabes), NUNCA inventes procedimientos de objetos perdidos, y NUNCA respondas solo "llama directo" sin dar el número.
+- OJO, no confundir: la regla del DOCUMENTO DE IDENTIDAD es sobre el REQUISITO para ingresar. Esta regla es cuando el cliente PERDIÓ u OLVIDÓ algo. Si pregunta "¿se me quedó mi carnet?" o "¿encontraron una billetera?", es esta regla (transferir), no la del requisito.
+- AL APLICAR ESTA REGLA usa EXACTAMENTE la frase indicada y NADA MÁS, sin explicar la hora ni la lógica interna.
+
 
 ACCESIBILIDAD (solo si preguntan): Lamentablemente no contamos con instalaciones adecuadas para personas en silla de ruedas.
 
@@ -1288,9 +1295,12 @@ const PALABRAS_NO_CONFIRMACION = ['con débito','con debito','con crédito','con
       clientesEsperandoAgente.add(telefono);
       // Detectar si es por habitación específica
       const esHabEspecifica = mensajeUsuario.toLowerCase().match(/la \d+|habitaci[oó]n \d+|la verde|la roja|la misma|esa misma|siempre pido|esa quiero|esa me gusta/);
-      const motivoTransferencia = esHabEspecifica 
+      const esObjetoPerdido = mensajeUsuario.toLowerCase().match(/perd[ií]|olvid|se me qued|dej[eé] (mi|una|un|el|la)|encontraron|carnet|c[eé]dula|billetera|cargador/);
+      const motivoTransferencia = esHabEspecifica
         ? '🏨 Cliente pide habitación específica — requiere atención manual'
-        : 'El cliente solicitó hablar con un agente';
+        : (esObjetoPerdido
+          ? '🔎 Cliente consulta por objeto perdido/olvidado — requiere atención manual'
+          : 'El cliente solicitó hablar con un agente');
       await notificarAdmin(telefono, mensajeUsuario, motivoTransferencia);
     }
 
