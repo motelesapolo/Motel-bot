@@ -1242,7 +1242,7 @@ const PALABRAS_NO_CONFIRMACION = ['con débito','con debito','con crédito','con
       : '';
 
     let respuesta = await llamarAPI({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-sonnet-5',
       max_tokens: 1000,
       system: getSystemPrompt() + bloqueosTexto + tarifasTexto,
       messages: historialReciente,
@@ -1278,7 +1278,7 @@ const PALABRAS_NO_CONFIRMACION = ['con débito','con debito','con crédito','con
           instruccionFinal = `SISTEMA: Resultados:\n${resultados}\nHay disponibilidad. Si ya tienes los 5 datos (nombre, motel, tipo, duración, hora exacta), ejecuta [ACCION:crear_reserva] AHORA en este mismo mensaje. Si falta algún dato, pídelo en prosa natural (sin listas, sin números) y SIN usar [ACCION].`;
         }
         respuestaFinal = await llamarAPI({
-          model: 'claude-sonnet-4-6',
+          model: 'claude-sonnet-5',
           max_tokens: 1000,
           system: getSystemPrompt() + bloqueosTexto + tarifasTexto,
           messages: [
@@ -1294,7 +1294,7 @@ const PALABRAS_NO_CONFIRMACION = ['con débito','con debito','con crédito','con
           const resultados2 = await ejecutarAccionesIA(textoRespuesta, telefono);
           resultados += '\n' + resultados2;
           const tercera = await llamarAPI({
-            model: 'claude-sonnet-4-6',
+            model: 'claude-sonnet-5',
             max_tokens: 1000,
             system: getSystemPrompt() + bloqueosTexto + tarifasTexto,
             messages: [
@@ -1363,7 +1363,7 @@ const PALABRAS_NO_CONFIRMACION = ['con débito','con debito','con crédito','con
       console.log(`⚠️ ${seQuedoPegado ? 'Bot pegado tras recibir nombre' : 'Confirmación falsa'} para ${telefono} — forzando creación real`);
       try {
         const forzar = await llamarAPI({
-          model: 'claude-sonnet-4-6',
+          model: 'claude-sonnet-5',
           max_tokens: 1000,
           system: getSystemPrompt() + bloqueosTexto + tarifasTexto,
           messages: [
@@ -1376,7 +1376,7 @@ const PALABRAS_NO_CONFIRMACION = ['con débito','con debito','con crédito','con
         if (textoForzado.includes('[ACCION:crear_reserva]')) {
           const resultados2 = await ejecutarAccionesIA(textoForzado, telefono);
           const final2 = await llamarAPI({
-            model: 'claude-sonnet-4-6',
+            model: 'claude-sonnet-5',
             max_tokens: 1000,
             system: getSystemPrompt() + bloqueosTexto + tarifasTexto,
             messages: [
