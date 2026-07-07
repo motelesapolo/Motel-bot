@@ -49,8 +49,6 @@ app.get('/health', (req, res) => res.json({ ok: true, conectado: botConectado, p
 app.listen(PORT, () => console.log(`🌐 Servidor web activo en puerto ${PORT}`));
 
 // ── Cliente WhatsApp ──────────────────────────────────────────
-const mensajesDelBot = new Set(); // IDs de mensajes enviados por el bot (para distinguirlos de los del admin)
-
 const cliente = new Client({
   authStrategy: new LocalAuth({ dataPath: './session' }),
   puppeteer: {
@@ -59,38 +57,6 @@ const cliente = new Client({
     args: ['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage',
            '--disable-accelerated-2d-canvas','--no-first-run','--no-zygote','--single-process','--disable-gpu'],
   },
-});
-
-// Envolver sendMessage: todo mensaje que envía el BOT queda registrado por su ID,
-// para que el detector de respuestas manuales del admin no lo confunda.
-const _sendMessageOriginal = cliente.sendMessage.bind(cliente);
-cliente.sendMessage = async (...args) => {
-  const msg = await _sendMessageOriginal(...args);
-  const id = msg?.id?._serialized || msg?.id?.id;
-  if (id) {
-    mensajesDelBot.add(id);
-    if (mensajesDelBot.size > 500) mensajesDelBot.clear();
-  }
-  return msg;
-};
-
-// PAUSA POR RESPUESTA MANUAL DEL ADMIN:
-// Los mensajes propios (fromMe) NO disparan el evento 'message' en whatsapp-web.js,
-// solo 'message_create'. Por eso la pausa se detecta aquí.
-cliente.on('message_create', async (mensaje) => {
-  try {
-    if (!mensaje.fromMe) return;
-    const id = mensaje.id?._serialized || mensaje.id?.id;
-    // Esperar 2s para que, si el mensaje lo envió el bot, su ID alcance a registrarse
-    await new Promise(r => setTimeout(r, 2000));
-    if (id && mensajesDelBot.has(id)) return; // lo envió el bot → no pausar
-    const destinatario = (mensaje.to || '').replace('@c.us', '').replace('@lid', '');
-    if (!destinatario || destinatario.includes('@g.us') || destinatario.includes('status')) return;
-    pausasPorAdmin.set(destinatario, Date.now());
-    console.log(`⏸️ Bot pausado 10min para ${destinatario} — admin respondió manualmente`);
-  } catch (e) {
-    console.error('Error en message_create:', e.message);
-  }
 });
 
 cliente.on('qr', (qr) => { qrActual = qr; botConectado = false; console.log('📱 QR generado - abre la URL de Railway'); });
@@ -119,7 +85,15 @@ cliente.on('disconnected', (reason) => {
 // ── Mensajes ──────────────────────────────────────────────────
 cliente.on('message', async (mensaje) => {
   if (mensaje.from.includes('@g.us')) return;
-  if (mensaje.fromMe) return; // los mensajes propios se manejan en message_create
+  if (mensaje.fromMe) {
+    // Si el admin responde a un cliente, pausar el bot para ese cliente 10 minutos
+    const destinatario = (mensaje.to || '').replace('@c.us', '').replace('@lid', '');
+    if (destinatario && !destinatario.includes('@g.us')) {
+      pausasPorAdmin.set(destinatario, Date.now());
+      console.log(`⏸️ Bot pausado 10min para ${destinatario} — admin respondió`);
+    }
+    return;
+  }
   if (mensaje.from === 'status@broadcast') return;
   // Filtrar newsletters, canales y mensajes de sistema que no tienen estructura normal
   if (mensaje.from.includes('@newsletter')) return;

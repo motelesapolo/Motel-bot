@@ -47,7 +47,6 @@ const reservasEnProgreso = new Map();
 const reservasConfirmadas = new Map();   // { id, googleEventId } por reservaId
 const bloqueosManuales = new Map();      // 'motel_tipo' → true (bloqueado manualmente)
 const tarifasEnviadas = new Set();       // teléfonos que ya recibieron la foto de tarifas
-const fotosEnviadasRecientes = new Map(); // telefono → Map("motel_tipo" → timestamp) para no reenviar las mismas fotos
 const disponibilidadConfirmada = new Map(); // telefono → {motel, tipo, fecha} disponibilidad ya confirmada
 const confirmacionesPendientes = new Map(); // telefono → número de veces que se ha pedido confirmación
 const clientesEsperandoAgente = new Set();
@@ -222,7 +221,6 @@ No des explicaciones largas. Concreta rápido.` : ''}
 - Si no sabes algo, ofreces transferir con un agente
 - NUNCA inventes ni supongas información que no esté en estas instrucciones. Si no sabes algo responde: "No tengo esa información, pero puedes consultarlo al ${process.env.MOTEL_TELEFONO} 😊"
 - NO uses tu conocimiento general para rellenar vacíos. Solo lo que está aquí.
-- ABREVIACIONES DE CHAT: interpreta las abreviaciones comunes sin pedir aclaración: "mñn"/"mñna" = mañana, "hrs" = horas, "tb" = también, "xfa"/"porfa" = por favor, "q" = que, "d" = de, "km" = cuánto/cómo según contexto, "finde" = fin de semana. Ejemplo: "horas disponibles para mñn" = pregunta por disponibilidad para MAÑANA.
 - ESTILO DE RESPUESTA: Cálido pero conciso. Responde SOLO lo que te preguntan. SIN asteriscos ni negritas (**texto**), SIN bullets (• o -), sin listas. Máximo 2 emojis por mensaje. Una pregunta a la vez.
 - REGLA PRINCIPAL: El bot responde dudas, crea reservas y nada más. No da información que no se pidió. No explica procesos. No lista opciones que no se pidieron.
 - RESPONDE SOLO LO PREGUNTADO: Contesta EXACTAMENTE lo que el cliente preguntó, nada más. No agregues datos extra "por si acaso", no ofrezcas información adicional, no sugieras cosas que no preguntó.
@@ -368,7 +366,7 @@ Habitación básica y acogedora. Incluye:
 ✓ 2 toallas
 ✓ Cortesía de bienvenida
 ✓ Agua caliente
-✓ Smart TV
+✓ TV
 
 ⭐ VIP
 Habitación más amplia, linda y mejor decorada que la Simple. Incluye todo lo anterior más:
@@ -431,7 +429,6 @@ CAPACIDAD DE HABITACIONES:
   * Para MAÑANA o días futuros → NO verificar, asumir que hay disponibilidad y avanzar directo a pedir nombre → crear reserva. Si al crear falla por disponibilidad, informar y ofrecer alternativas.
 - NUNCA decir "hay disponibilidad" como mensaje final sin hacer nada más. Si hay disponibilidad → avanzar al siguiente paso inmediatamente.
 - NUNCA verificar disponibilidad sin tener tipo, motel y hora — siempre preguntar lo que falte primero.
-- PROHIBIDO afirmar "sí, está disponible" o "tenemos disponible" de memoria, sin haberlo verificado con la acción en esta conversación. Esto aplica también cuando el cliente responde/cita una FOTO preguntando si hay disponible: si es para HOY, verificar con [ACCION:verificar_disponibilidad] (pidiendo antes los datos que falten); solo para días futuros aplica la regla de asumir y avanzar.
 - El flujo correcto es: ejecutar [ACCION:verificar_disponibilidad] → recibir resultado → ENTONCES responder al cliente con lo que dice el resultado.
 - Si el cliente pregunta si hay disponibilidad en otro horario, ejecutar [ACCION:verificar_disponibilidad] con ese horario antes de responder
 - Si tampoco hay disponibilidad en el otro motel, decir: "Lo sentimos, no tenemos disponibilidad para ese horario. Te invitamos a llamarnos directamente al ${process.env.MOTEL_TELEFONO} (Apolo anexo 710 / Le Chateau anexo 210) para revisar opciones o hablar con un agente."
@@ -484,10 +481,6 @@ ANEXOS (son para llamar desde DENTRO de la habitación hacia recepción, NO para
 IMPORTANTE: Cuando un cliente necesite contactar al motel desde afuera, dar SOLO el número ${process.env.MOTEL_TELEFONO}. NO mencionar los anexos para llamadas externas.
 
 DIFERENCIA ENTRE MOTELES (solo si preguntan): Ambos son similares en calidad con los mismos tipos de habitación y precios. Cada habitación tiene su propia decoración. Ambos son igual de buenos.
-
-TELEVISIÓN (si preguntan): Todas las habitaciones cuentan con Smart TV. Responder eso directamente — NUNCA transferir a un agente por esta pregunta.
-
-CALEFACCIÓN (si preguntan): Sí, las habitaciones cuentan con paneles calefactores. Responder eso directamente.
 
 MOTEL JARDÍN Y MOTEL DEL PARQUE: Si alguien pregunta por Motel Jardín (Eulogia Sánchez 85) o Motel Del Parque (Ramón Carnicer 47), responder EXACTAMENTE esto, sin agregar nada más:
 "Desde el 1 de Abril, Motel Jardín y Motel Del Parque dejaron de pertenecer a nuestra cadena. Pero estamos funcionando en Motel Apolo y Motel Le Chateau. Te invitamos a conocernos 🙌"
@@ -573,8 +566,6 @@ CARTA DE PRECIOS:
 - NUNCA envíes este enlace para fotos de habitaciones — para eso existe la acción enviar_fotos.
 
 FOTOS DE HABITACIONES:
-- Si el RESULTADO_FOTOS devuelve "yaEnviado": true, significa que esas fotos YA se enviaron hace poco: NO digas que las enviaste de nuevo. Responde la pregunta del cliente refiriéndote a las fotos de más arriba (ej: "Son las fotos que te envié recién 😊").
-- OJO: que el cliente MENCIONE las fotos o las habitaciones ("cuál de esas habitaciones me tocará", "la de la foto") NO es pedir fotos. Solo usa enviar_fotos si las pide explícitamente.
 - Un tipo, un motel: [ACCION:enviar_fotos]{"motel": "apolo", "tipo": "vip"}[/ACCION]
 - Múltiples tipos, un motel: ejecuta una acción por cada tipo pedido:
   [ACCION:enviar_fotos]{"motel": "apolo", "tipo": "simple"}[/ACCION][ACCION:enviar_fotos]{"motel": "apolo", "tipo": "vip"}[/ACCION]
@@ -610,10 +601,7 @@ ${!esSinAgente() ?
 1. Saludar con "${saludo}, ¿en qué podemos ayudarte? 😊"
 2. Preguntar motel (Apolo o Le Chateau) si no lo menciona
 3. Preguntar tipo de habitación (Simple, VIP o Jacuzzi)
-4. Preguntar duración nombrando SIEMPRE las CUATRO opciones: 3 horas, promo 6x3, noche y 24 horas. NUNCA omitas la noche del menú.
-   ❌ MAL: "¿momento, 6x3 o 24 horas?" (falta la noche)
-   ✅ BIEN: "¿3 horas, la promo 6x3, noche o 24 horas?"
-   Las 12h no se ofrecen de la nada, pero SÍ cuando el cliente las menciona o cuando su estadía necesita más de 6 horas (regla de cobertura)
+4. Preguntar duración (3h, 6h con promo 6x3, noche o 24h) — las 12h no se ofrecen de la nada, pero SÍ cuando el cliente las menciona o cuando su estadía necesita más de 6 horas (regla de cobertura)
 5. Preguntar fecha y hora de llegada
    - Si el cliente menciona una hora SIN AM/PM ni formato 24h (ej: "las 10", "las 11"), SIEMPRE preguntar: "¿Esa hora es AM o PM?" — NUNCA asumir
    - Si dice "22:00", "23:00" u otro formato 24h claro, no preguntar
@@ -1009,21 +997,6 @@ Datos: ${datos.motel} | ${tipoLabel} | ${datos.fechaInicio} | $${precio.toLocale
       const esAmbos = motelRaw.includes('ambos') || motelRaw.includes('los dos') || motelRaw.includes('both');
       const motel = motelRaw.includes('chateau') ? 'lechateau' : 'apolo';
 
-      // GUARDA ANTI-REENVÍO: si estas MISMAS fotos ya se enviaron hace menos de 10 minutos,
-      // no reenviarlas (el modelo a veces las repite cuando el cliente solo las menciona).
-      const guardaKeys = esAmbos ? ['apolo_' + tipo, 'lechateau_' + tipo] : [motel + '_' + tipo];
-      const registroFotos = fotosEnviadasRecientes.get(telefono) || new Map();
-      const ahoraFotos = Date.now();
-      const yaEnviadasRecien = guardaKeys.every(k => {
-        const t = registroFotos.get(k);
-        return t && (ahoraFotos - t) < 10 * 60 * 1000;
-      });
-      if (yaEnviadasRecien) {
-        return 'RESULTADO_FOTOS: {"ok": false, "yaEnviado": true}';
-      }
-      guardaKeys.forEach(k => registroFotos.set(k, ahoraFotos));
-      fotosEnviadasRecientes.set(telefono, registroFotos);
-
       if (esAmbos) {
         // Retornar resultado para ambos moteles
         const tipoFinal = (tipo === '' || tipo === 'todas' || tipo === 'todo') ? 'todas' : tipo;
@@ -1160,7 +1133,6 @@ async function procesarMensaje(telefono, mensajeUsuario, numeroPrueba = null) {
     conversaciones.delete(telefono);
     reservasEnProgreso.delete(telefono);
     tarifasEnviadas.delete(telefono);
-    fotosEnviadasRecientes.delete(telefono);
     disponibilidadConfirmada.delete(telefono);
     confirmacionesPendientes.delete(telefono);
     console.log(`⏰ Conversación de ${telefono} limpiada por inactividad`);
@@ -1440,7 +1412,6 @@ function limpiarConversacion(telefono) {
   ultimoMensaje.delete(telefono);
   ultimaActividad.delete(telefono);
   tarifasEnviadas.delete(telefono);
-  fotosEnviadasRecientes.delete(telefono);
   disponibilidadConfirmada.delete(telefono);
   confirmacionesPendientes.delete(telefono);
 }
