@@ -84,6 +84,10 @@ cliente.on('message_create', async (mensaje) => {
     // Esperar 2s para que, si el mensaje lo envió el bot, su ID alcance a registrarse
     await new Promise(r => setTimeout(r, 2000));
     if (id && mensajesDelBot.has(id)) return; // lo envió el bot → no pausar
+    // Ignorar mensajes AUTOMÁTICOS nativos de WhatsApp Business (saludo de bienvenida,
+    // mensaje de ausencia): los envía la app sola y NO son el admin respondiendo a mano.
+    const cuerpoFromMe = (mensaje.body || '').toLowerCase();
+    if (cuerpoFromMe.includes('bienvenid') || cuerpoFromMe.includes('te esperamos')) return;
     const destinatario = (mensaje.to || '').replace('@c.us', '').replace('@lid', '');
     if (!destinatario || destinatario.includes('@g.us') || destinatario.includes('status')) return;
     pausasPorAdmin.set(destinatario, Date.now());
