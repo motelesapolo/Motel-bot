@@ -453,7 +453,8 @@ HORARIOS DE ESTADÍA:
   ✅ Llega 15:00 y sale 19:00 = 4 horas → ofrecer 6x3 (3h no alcanza)
   ✅ Llega 14:00 y sale 16:00 = 2 horas → ofrecer 3h
   ❌ NUNCA: llega 00:00 y sale 9:00 → ofrecer "3h o la promo 6x3" (no cubren las 9 horas)
-- 24 HORAS: cualquier hora, sin cambios.
+- 24 HORAS: cualquier hora, sin cambios. El paquete de 24 horas SOLO se ofrece o reserva cuando el cliente dice EXPLÍCITAMENTE "24 horas" (o "un día completo" y lo confirma).
+- "POR DÍA" NO ES 24 HORAS: si el cliente pregunta por habitaciones "por día", "de día", "durante el día" o "en el día", está preguntando si puede ir DE DÍA (no en la noche) — NO está pidiendo el paquete de 24 horas. Responder que sí, atendemos las 24 horas todos los días, y ofrecer el menú normal de duraciones (3 horas, promo 6x3, noche o 24 horas). NUNCA crear una reserva de 24h por una pregunta "por día" sin que el cliente haya elegido explícitamente esa duración.
 
 POLÍTICA DE SALIDAS:
 - Habitaciones por momento (3h), noche y 12 horas: en general no se puede salir y volver a entrar. Sin embargo, puede hacerlo UNA persona. Solo si preguntan.
@@ -702,11 +703,11 @@ REGLAS:
 - Si el cliente ya confirmó una vez y vuelves a preguntar si confirma → estás en un loop. PARA el loop ejecutando [ACCION:crear_reserva] de inmediato.
 - MÁXIMO UNA VEZ puedes pedir confirmación. Si el cliente responde cualquier cosa afirmativa, crear la reserva sin más preguntas.
 - ANTES DE CREAR LA RESERVA, verifica que tienes los 5 datos OBLIGATORIOS: nombre, motel, tipo de habitación, duración y HORA DE LLEGADA exacta. Si falta alguno (especialmente la hora), NO crear la reserva — pedir el dato que falta primero. NUNCA crear una reserva sin hora de llegada confirmada.
-- NUNCA escribir "Reserva confirmada ✅" sin que el sistema haya devuelto RESULTADO_RESERVA con ok:true. Si no ejecutaste la acción o falta un dato, NO escribas "Reserva confirmada".
+- NUNCA escribir "Reserva confirmada ✅" NI "Reserva modificada ✅" sin que el sistema haya devuelto RESULTADO_RESERVA con ok:true EN ESTE TURNO para esos datos. Si no ejecutaste la acción, falta un dato, o el sistema devolvió ok:false, NO escribas confirmación ni modificación. NUNCA muestres en una confirmación datos que el sistema no aplicó.
 - PRIORIDAD DE ACCIONES: Si en un mismo mensaje el cliente da el nombre Y hace otra pregunta, y ya tienes los 5 datos obligatorios, PRIMERO ejecuta [ACCION:crear_reserva] y DESPUÉS responde la otra pregunta en el mismo mensaje. Si falta algún dato, pídelo en vez de crear.
 - Si ya verificaste disponibilidad y hay disponibilidad, Y TIENES LA HORA DE LLEGADA, y el cliente da su nombre → crear la reserva INMEDIATAMENTE. Pero si NO tienes la hora exacta, pídela primero antes de crear. NO decir "hay disponibilidad" y quedarse esperando.
 - NUNCA terminar un mensaje diciendo solo "hay disponibilidad" sin crear la reserva o pedir algún dato que falta. Si tienes nombre, motel, tipo, fecha y hora → crear reserva ahora.
-- Si el sistema responde RESERVA_YA_CREADA: significa que ya se creó una reserva en esta conversación. NO crear otra. Responder con la confirmación de la reserva existente usando el ID que retorna.
+- Si el sistema responde RESERVA_YA_CREADA: ya existe una reserva en esta conversación. Distinguir: (1) si el cliente solo estaba confirmando de nuevo, responder con la confirmación de la reserva existente TAL COMO ESTÁ. (2) Si el cliente pidió CAMBIAR algo (tipo, fecha, hora, motel), reenviar [ACCION:crear_reserva] con "esModificacion": true, "reservaIdAnterior" con el id retornado y SOLO los campos que cambian. NUNCA responder con una confirmación que muestre datos nuevos que el sistema no aplicó.
 - Si el sistema responde DATOS_INCOMPLETOS: falta un dato (hora, nombre o tipo). NO escribir "Reserva confirmada". Pedir amablemente el dato que falta.
 - Si el sistema responde FALTA_HORA: no incluiste la hora de llegada en fechaInicio. NO escribir "Reserva confirmada". Preguntar "¿A qué hora llegarías?" y volver a crear con la fecha y hora completas (formato 2026-MM-DDTHH:MM:00).
 - Si el sistema responde FECHA_INVALIDA: la fecha enviada no es válida. NO confirmes. Pide amablemente al cliente la fecha y hora de llegada de nuevo.
@@ -871,7 +872,7 @@ async function procesarAccion(accion, datos, telefono) {
       // Evitar crear reserva duplicada si ya se creó una en esta conversación recientemente
       const reservaReciente = reservasEnProgreso.get(telefono);
       if (reservaReciente && !datos.esModificacion) {
-        return `RESULTADO_RESERVA: {"ok": false, "error": "RESERVA_YA_CREADA", "id": "${reservaReciente}"}`;
+        return `RESULTADO_RESERVA: {"ok": false, "error": "RESERVA_YA_CREADA", "id": "${reservaReciente}", "mensaje": "Ya existe la reserva ${reservaReciente} en esta conversación. Si el cliente pidió CAMBIAR algo (tipo, fecha, hora, motel), reenviar [ACCION:crear_reserva] con esModificacion: true, reservaIdAnterior: ${reservaReciente} y SOLO los campos que cambian. Si NO pidió cambios, responder con la confirmación de la reserva existente tal como está. NUNCA confirmar datos nuevos que el sistema no aplicó."}`;
       }
 
       // La fecha ya viene validada con hora (FALTA_HORA se rechazó arriba)
@@ -1282,6 +1283,10 @@ const PALABRAS_NO_CONFIRMACION = ['con débito','con debito','con crédito','con
         // Instrucción context-aware: si se verificó disponibilidad y HAY cupo, permitir crear la reserva en el mismo turno
         let instruccionFinal = `SISTEMA: Resultados:\n${resultados}\nResponde al cliente sin bloques [ACCION].`;
         const dispPositiva = resultados.includes('RESULTADO_DISPONIBILIDAD') && (resultados.includes('"hayDisponibilidad":true') || resultados.includes('"hayDisponibilidad": true'));
+        const yaCreadaConCambio = resultados.includes('RESERVA_YA_CREADA');
+        if (yaCreadaConCambio) {
+          instruccionFinal = `SISTEMA: Resultados:\n${resultados}\nYa existe una reserva en esta conversación. Si el cliente pidió CAMBIAR algo de esa reserva (tipo, fecha, hora o motel), ejecuta AHORA [ACCION:crear_reserva] con "esModificacion": true, "reservaIdAnterior" con el id indicado, y SOLO los campos que cambian. Si NO pidió cambios, responde con la confirmación de la reserva existente tal como está, sin [ACCION]. NUNCA confirmes datos nuevos que el sistema no haya aplicado.`;
+        }
         if (dispPositiva) {
           instruccionFinal = `SISTEMA: Resultados:\n${resultados}\nHay disponibilidad. Si ya tienes los 5 datos (nombre, motel, tipo, duración, hora exacta), ejecuta [ACCION:crear_reserva] AHORA en este mismo mensaje. Si falta algún dato, pídelo en prosa natural (sin listas, sin números) y SIN usar [ACCION].`;
         }
@@ -1308,7 +1313,7 @@ const PALABRAS_NO_CONFIRMACION = ['con débito','con debito','con crédito','con
             messages: [
               ...historialReciente,
               { role: 'assistant', content: textoRespuesta },
-              { role: 'user', content: `SISTEMA: Resultados:\n${resultados2}\nResponde al cliente con la confirmación de la reserva, sin bloques [ACCION].` },
+              { role: 'user', content: `SISTEMA: Resultados:\n${resultados2}\nResponde al cliente según los resultados: si ok es true, la confirmación de la reserva; si ok es false, explica el problema con naturalidad. Sin bloques [ACCION].` },
             ],
           });
           textoRespuesta = extraerTexto(tercera);
