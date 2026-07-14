@@ -460,7 +460,7 @@ HORARIOS DE ESTADÍA:
 - REGLA DE COBERTURA (MUY IMPORTANTE): si el cliente indica hora de llegada Y hora de salida, CALCULA cuántas horas se queda y ofrece SOLO paquetes que CUBRAN esa estadía completa. NUNCA ofrezcas un paquete más corto que las horas que el cliente dijo que se queda. Ejemplos:
   ✅ Llega 00:00 y sale 9:00 = 9 horas → ofrecer 12 horas (3h y 6x3 NO alcanzan)
   ✅ Llega 19:00 y sale 9:00 = 14 horas → ofrecer 12 HORAS + 2 HORAS EXTRA (NO el paquete de 24 horas: sale más caro)
-- ESTADÍAS QUE SUPERAN LAS 12 HORAS POR POCO: si la estadía es de 13 a 16 horas, la opción correcta es 12 HORAS + las horas extra necesarias (valor por hora extra: $5.000 Simple / $6.000 VIP / $7.000 Jacuzzi). NUNCA ofrecer el paquete de 24 horas para esas estadías — cuesta más. Solo ofrecer 24 horas si el cliente lo pide explícitamente o su estadía se acerca a las 24 horas.
+- ESTADÍAS QUE SUPERAN LAS 12 HORAS: el máximo es 2 horas extra por estadía, así que 12 horas + extras cubre hasta 14 horas. Si la estadía es de 13 o 14 horas → ofrecer 12 HORAS + las horas extra necesarias (valor por hora extra: $5.000 Simple / $6.000 VIP / $7.000 Jacuzzi). Si la estadía es de 15 horas o más → la única opción es el paquete de 24 HORAS.
   ✅ Llega 15:00 y sale 19:00 = 4 horas → ofrecer 6x3 (3h no alcanza)
   ✅ Llega 14:00 y sale 16:00 = 2 horas → ofrecer 3h
   ❌ NUNCA: llega 00:00 y sale 9:00 → ofrecer "3h o la promo 6x3" (no cubren las 9 horas)
@@ -486,6 +486,7 @@ MEDIOS DE PAGO: El pago se realiza al llegar a recepción. Se acepta efectivo, t
 HORAS EXTRAS:
 - Se pueden solicitar máximo 2 horas extras por estadía
 - Precio por hora extra: Simple $5.000 | VIP $6.000 | Jacuzzi $7.000
+- MÁXIMO 2 HORAS EXTRA por estadía. Si el cliente necesita más de 2 horas adicionales, corresponde el paquete de duración superior.
 - Si quieren quedarse más de 2 horas extra, deben pagar una estadía completa (3h, noche o 24h)
 - También pueden usar la promoción 6x3 para esto
 
