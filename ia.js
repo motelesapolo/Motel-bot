@@ -18,7 +18,16 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 async function llamarAPI(params, intentos = 3) {
   for (let i = 1; i <= intentos; i++) {
     try {
-      return await anthropic.messages.create(params);
+      const resp = await anthropic.messages.create(params);
+      // Detectar respuesta SIN texto (puede pasar si el modelo agota max_tokens razonando):
+      // registrar diagnóstico y reintentar una vez antes de devolverla.
+      const tieneTexto = Array.isArray(resp?.content) && resp.content.some(b => b?.type === 'text' && b.text?.trim());
+      if (!tieneTexto && i < intentos) {
+        const tipos = (resp?.content || []).map(b => b?.type).join(',') || 'sin bloques';
+        console.log(`⚠️ Respuesta sin texto (stop: ${resp?.stop_reason || '?'}, bloques: ${tipos}) — reintentando (${i}/${intentos})`);
+        continue;
+      }
+      return resp;
     } catch (err) {
       const es429 = err.status === 429 || err.message?.includes('rate_limit');
       if (es429 && i < intentos) {
@@ -450,6 +459,8 @@ HORARIOS DE ESTADÍA:
 - 3 HORAS y 6x3: cualquier hora, sin cambios.
 - REGLA DE COBERTURA (MUY IMPORTANTE): si el cliente indica hora de llegada Y hora de salida, CALCULA cuántas horas se queda y ofrece SOLO paquetes que CUBRAN esa estadía completa. NUNCA ofrezcas un paquete más corto que las horas que el cliente dijo que se queda. Ejemplos:
   ✅ Llega 00:00 y sale 9:00 = 9 horas → ofrecer 12 horas (3h y 6x3 NO alcanzan)
+  ✅ Llega 19:00 y sale 9:00 = 14 horas → ofrecer 12 HORAS + 2 HORAS EXTRA (NO el paquete de 24 horas: sale más caro)
+- ESTADÍAS QUE SUPERAN LAS 12 HORAS POR POCO: si la estadía es de 13 a 16 horas, la opción correcta es 12 HORAS + las horas extra necesarias (valor por hora extra: $5.000 Simple / $6.000 VIP / $7.000 Jacuzzi). NUNCA ofrecer el paquete de 24 horas para esas estadías — cuesta más. Solo ofrecer 24 horas si el cliente lo pide explícitamente o su estadía se acerca a las 24 horas.
   ✅ Llega 15:00 y sale 19:00 = 4 horas → ofrecer 6x3 (3h no alcanza)
   ✅ Llega 14:00 y sale 16:00 = 2 horas → ofrecer 3h
   ❌ NUNCA: llega 00:00 y sale 9:00 → ofrecer "3h o la promo 6x3" (no cubren las 9 horas)
@@ -1252,7 +1263,7 @@ const PALABRAS_NO_CONFIRMACION = ['con débito','con debito','con crédito','con
 
     let respuesta = await llamarAPI({
       model: 'claude-sonnet-5',
-      max_tokens: 1000,
+      max_tokens: 1600,
       system: getSystemPrompt() + bloqueosTexto + tarifasTexto,
       messages: historialReciente,
     });
@@ -1292,7 +1303,7 @@ const PALABRAS_NO_CONFIRMACION = ['con débito','con debito','con crédito','con
         }
         respuestaFinal = await llamarAPI({
           model: 'claude-sonnet-5',
-          max_tokens: 1000,
+          max_tokens: 1600,
           system: getSystemPrompt() + bloqueosTexto + tarifasTexto,
           messages: [
             ...historialReciente,
@@ -1308,7 +1319,7 @@ const PALABRAS_NO_CONFIRMACION = ['con débito','con debito','con crédito','con
           resultados += '\n' + resultados2;
           const tercera = await llamarAPI({
             model: 'claude-sonnet-5',
-            max_tokens: 1000,
+            max_tokens: 1600,
             system: getSystemPrompt() + bloqueosTexto + tarifasTexto,
             messages: [
               ...historialReciente,
@@ -1377,7 +1388,7 @@ const PALABRAS_NO_CONFIRMACION = ['con débito','con debito','con crédito','con
       try {
         const forzar = await llamarAPI({
           model: 'claude-sonnet-5',
-          max_tokens: 1000,
+          max_tokens: 1600,
           system: getSystemPrompt() + bloqueosTexto + tarifasTexto,
           messages: [
             ...historialReciente,
@@ -1390,7 +1401,7 @@ const PALABRAS_NO_CONFIRMACION = ['con débito','con debito','con crédito','con
           const resultados2 = await ejecutarAccionesIA(textoForzado, telefono);
           const final2 = await llamarAPI({
             model: 'claude-sonnet-5',
-            max_tokens: 1000,
+            max_tokens: 1600,
             system: getSystemPrompt() + bloqueosTexto + tarifasTexto,
             messages: [
               ...historialReciente,
