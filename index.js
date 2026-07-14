@@ -64,7 +64,18 @@ const cliente = new Client({
 // Envolver sendMessage: todo mensaje que envía el BOT queda registrado por su ID,
 // para que el detector de respuestas manuales del admin no lo confunda.
 const _sendMessageOriginal = cliente.sendMessage.bind(cliente);
+const ultimoEnvioBot = new Map(); // chat destino → timestamp del último INTENTO de envío del bot
 cliente.sendMessage = async (...args) => {
+  // Registrar el intento ANTES de enviar: si el envío lanza error pero WhatsApp igual
+  // despacha el mensaje (bug conocido de la librería), el detector de pausa sabrá
+  // que ese fromMe vino del bot y no del admin.
+  try {
+    const destino = String(args[0] || '').replace('@c.us', '').replace('@lid', '');
+    if (destino) {
+      ultimoEnvioBot.set(destino, Date.now());
+      if (ultimoEnvioBot.size > 300) ultimoEnvioBot.clear();
+    }
+  } catch (e) { /* nunca bloquear un envío por el registro */ }
   const msg = await _sendMessageOriginal(...args);
   const id = msg?.id?._serialized || msg?.id?.id;
   if (id) {
@@ -90,6 +101,10 @@ cliente.on('message_create', async (mensaje) => {
     if (cuerpoFromMe.includes('bienvenid') || cuerpoFromMe.includes('te esperamos')) return;
     const destinatario = (mensaje.to || '').replace('@c.us', '').replace('@lid', '');
     if (!destinatario || destinatario.includes('@g.us') || destinatario.includes('status')) return;
+    // GUARDA: si el bot intentó enviar algo a este mismo chat hace menos de 15s,
+    // este fromMe es casi seguro del bot (envío con error no registrado) → no pausar.
+    const intentoReciente = ultimoEnvioBot.get(destinatario);
+    if (intentoReciente && (Date.now() - intentoReciente) < 15000) return;
     pausasPorAdmin.set(destinatario, Date.now());
     console.log(`⏸️ Bot pausado 10min para ${destinatario} — admin respondió manualmente`);
   } catch (e) {
