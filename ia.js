@@ -486,7 +486,6 @@ MEDIOS DE PAGO: El pago se realiza al llegar a recepción. Se acepta efectivo, t
 HORAS EXTRAS:
 - Se pueden solicitar máximo 2 horas extras por estadía
 - Precio por hora extra: Simple $5.000 | VIP $6.000 | Jacuzzi $7.000
-- MÁXIMO 2 HORAS EXTRA por estadía. Si el cliente necesita más de 2 horas adicionales, corresponde el paquete de duración superior.
 - Si quieren quedarse más de 2 horas extra, deben pagar una estadía completa (3h, noche o 24h)
 - También pueden usar la promoción 6x3 para esto
 

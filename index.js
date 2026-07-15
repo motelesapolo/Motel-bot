@@ -438,22 +438,40 @@ Usa /libre para reactivar.`);
 
       if (textoRespuesta && textoRespuesta.trim()) {
         await new Promise(r => setTimeout(r, 1500));
-        await cliente.sendMessage(chatId, textoRespuesta);
+        try {
+          await cliente.sendMessage(chatId, textoRespuesta);
+        } catch (eEnvio) {
+          console.error(`Envío directo falló (${eEnvio.message}) — intentando vía reply`);
+          await mensaje.reply(textoRespuesta);
+        }
       }
 
       await chat.clearState();
       return;
     } else {
-      await cliente.sendMessage(chatId, respuesta);
-      console.log(`📤 Respuesta enviada a ${telefono}`);
+      try {
+        await cliente.sendMessage(chatId, respuesta);
+        console.log(`📤 Respuesta enviada a ${telefono}`);
+      } catch (eEnvio) {
+        // Plan B: los chats @lid a veces fallan con el envío directo pero aceptan reply
+        console.error(`Envío directo falló (${eEnvio.message}) — intentando vía reply`);
+        await mensaje.reply(respuesta);
+        console.log(`📤 Respuesta enviada vía reply (plan B) a ${telefono}`);
+      }
     }
   } catch (error) {
     console.error('Error procesando mensaje:', error.message);
+    if (error.stack) console.error('Traza:', error.stack.split('\n').slice(0, 5).join('\n'));
     // Intentar avisar al cliente que hubo un problema (sin dejarlo sin respuesta)
+    const avisoError = 'Disculpa, tuvimos un problema técnico. ¿Podrías repetir tu mensaje? 😊';
     try {
-      await cliente.sendMessage(mensaje.from, 'Disculpa, tuvimos un problema técnico. ¿Podrías repetir tu mensaje? 😊');
+      await cliente.sendMessage(mensaje.from, avisoError);
     } catch (e2) {
-      console.error('No se pudo enviar mensaje de error al cliente:', e2.message);
+      try {
+        await mensaje.reply(avisoError);
+      } catch (e3) {
+        console.error('No se pudo enviar mensaje de error al cliente:', e3.message);
+      }
     }
   } finally {
     procesandoCliente.delete(telefono);
