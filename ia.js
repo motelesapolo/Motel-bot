@@ -29,10 +29,14 @@ async function llamarAPI(params, intentos = 3) {
       }
       return resp;
     } catch (err) {
+      // Reintentar ante errores TEMPORALES del servidor de Anthropic:
+      // 429 (rate limit) y 529/500/502/503 (saturación o error pasajero del servidor).
       const es429 = err.status === 429 || err.message?.includes('rate_limit');
-      if (es429 && i < intentos) {
+      const esSaturado = [500, 502, 503, 529].includes(err.status) || err.message?.includes('overloaded');
+      if ((es429 || esSaturado) && i < intentos) {
         const espera = 5000 * i; // 5s, 10s
-        console.log(`⏳ Rate limit 429 — reintentando en ${espera/1000}s (intento ${i}/${intentos})`);
+        const tipo = es429 ? 'Rate limit 429' : `Servidor saturado ${err.status || ''}`;
+        console.log(`⏳ ${tipo} — reintentando en ${espera/1000}s (intento ${i}/${intentos})`);
         await new Promise(r => setTimeout(r, espera));
       } else {
         throw err;
