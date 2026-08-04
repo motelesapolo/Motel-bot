@@ -317,7 +317,7 @@ Usa /libre para reactivar.`);
   }
 
   const debeContinuar = await new Promise(resolve => {
-    const timer = setTimeout(() => resolve(true), 4000);
+    const timer = setTimeout(() => resolve(true), 7000);
     procesandoCliente.set(telefono, { timer, cancelar: () => resolve(false) });
   });
   // Si fue cancelado por un mensaje más nuevo, este hilo termina aquí
