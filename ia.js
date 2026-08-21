@@ -1279,7 +1279,7 @@ const PALABRAS_NO_CONFIRMACION = ['con débito','con debito','con crédito','con
 
     let respuesta = await llamarAPI({
       model: 'claude-sonnet-5',
-      max_tokens: 1600,
+      max_tokens: 3000,
       system: getSystemPrompt() + bloqueosTexto + tarifasTexto,
       messages: historialReciente,
     });
@@ -1319,7 +1319,7 @@ const PALABRAS_NO_CONFIRMACION = ['con débito','con debito','con crédito','con
         }
         respuestaFinal = await llamarAPI({
           model: 'claude-sonnet-5',
-          max_tokens: 1600,
+          max_tokens: 3000,
           system: getSystemPrompt() + bloqueosTexto + tarifasTexto,
           messages: [
             ...historialReciente,
@@ -1335,7 +1335,7 @@ const PALABRAS_NO_CONFIRMACION = ['con débito','con debito','con crédito','con
           resultados += '\n' + resultados2;
           const tercera = await llamarAPI({
             model: 'claude-sonnet-5',
-            max_tokens: 1600,
+            max_tokens: 3000,
             system: getSystemPrompt() + bloqueosTexto + tarifasTexto,
             messages: [
               ...historialReciente,
@@ -1404,7 +1404,7 @@ const PALABRAS_NO_CONFIRMACION = ['con débito','con debito','con crédito','con
       try {
         const forzar = await llamarAPI({
           model: 'claude-sonnet-5',
-          max_tokens: 1600,
+          max_tokens: 3000,
           system: getSystemPrompt() + bloqueosTexto + tarifasTexto,
           messages: [
             ...historialReciente,
@@ -1417,7 +1417,7 @@ const PALABRAS_NO_CONFIRMACION = ['con débito','con debito','con crédito','con
           const resultados2 = await ejecutarAccionesIA(textoForzado, telefono);
           const final2 = await llamarAPI({
             model: 'claude-sonnet-5',
-            max_tokens: 1600,
+            max_tokens: 3000,
             system: getSystemPrompt() + bloqueosTexto + tarifasTexto,
             messages: [
               ...historialReciente,
@@ -1438,7 +1438,7 @@ const PALABRAS_NO_CONFIRMACION = ['con débito','con debito','con crédito','con
     // Fallback: si por cualquier razón el texto quedó vacío, no mandar mensaje vacío
     if (!textoRespuesta || !textoRespuesta.trim()) {
       console.log(`⚠️ Respuesta vacía para ${telefono} — usando fallback`);
-      textoRespuesta = '¿En qué más podemos ayudarte? 😊';
+      textoRespuesta = 'Estoy procesando tu solicitud, dame un momentito por favor 😊 Si prefieres, un ejecutivo puede ayudarte en breve.';
     }
 
     const respuestaLimpia = limpiarRespuesta(textoRespuesta);
