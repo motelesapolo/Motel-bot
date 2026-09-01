@@ -128,9 +128,17 @@ cliente.on('ready', () => {
   setClienteWhatsApp(cliente);
 });
 cliente.on('auth_failure', (msg) => console.error('❌ Auth failure:', msg));
-cliente.on('disconnected', (reason) => {
+let reconectando = false; // evita reinicios simultáneos que se pisan entre sí
+cliente.on('disconnected', async (reason) => {
   console.log('📵 Desconectado:', reason);
   botConectado = false;
+  if (reconectando) { console.log('⏳ Ya se está reconectando, ignorando evento duplicado'); return; }
+  reconectando = true;
+
+  // Cerrar el navegador ANTES de tocar la sesión, para no chocar con "browser already running"
+  try { await cliente.destroy(); console.log('🧹 Cliente cerrado limpiamente'); }
+  catch (e) { console.error('Error cerrando cliente:', e.message); }
+
   if (reason === 'LOGOUT') {
     console.log('🔄 LOGOUT detectado — limpiando sesión...');
     const fs = require('fs');
@@ -139,8 +147,14 @@ cliente.on('disconnected', (reason) => {
       fs.rmSync(path.join(__dirname, 'session'), { recursive: true, force: true });
       console.log('🗑️ Sesión eliminada');
     } catch (e) { console.error('Error eliminando sesión:', e.message); }
+    // Salir del proceso: Railway lo reinicia solo, con arranque 100% limpio (sin navegador zombie).
+    // Al volver, generará un QR nuevo y estable para escanear.
+    console.log('♻️ Saliendo para que Railway reinicie limpio. Escanea el QR nuevo al volver.');
+    setTimeout(() => process.exit(0), 2000);
+  } else {
+    // Desconexión temporal (no logout): reintentar reconectar tras 10s
+    setTimeout(() => { cliente.initialize().catch(e => { console.error('Reinit falló:', e.message); process.exit(1); }); reconectando = false; }, 10000);
   }
-  setTimeout(() => cliente.initialize(), 10000);
 });
 
 // ── Mensajes ──────────────────────────────────────────────────
