@@ -343,19 +343,19 @@ RECLAMOS Y CONTACTO DIRECTO:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 TARIFA SEMANA (domingo 8:00 AM a viernes 7:59 AM):
-🏠 Simple:  3h $24.000 (PROMO AGOSTO) / 6x3 $29.000 | Noche $37.000 | 12h $37.000 | 24h $60.000
+🏠 Simple:  3h $26.000 (PROMO SEPTIEMBRE) / 6x3 $29.000 | Noche $37.000 | 12h $37.000 | 24h $60.000
 ⭐ VIP:     3h/6x3 $34.000 | Noche $44.000 | 12h $44.000 | 24h $70.000
 🛁 Jacuzzi: 3h/6x3 $42.000 | Noche $55.000 | 12h $55.000 | 24h $80.000
 
 TARIFA FIN DE SEMANA (viernes 8:00 AM a domingo 7:59 AM, y vísperas de feriado):
-🏠 Simple:  3h $24.000 (PROMO AGOSTO) / 6x3 $31.000 | Noche $41.000 | 12h $41.000 | 24h $60.000
+🏠 Simple:  3h $26.000 (PROMO SEPTIEMBRE) / 6x3 $31.000 | Noche $41.000 | 12h $41.000 | 24h $60.000
 ⭐ VIP:     3h/6x3 $39.000 | Noche $48.000 | 12h $48.000 | 24h $70.000
 🛁 Jacuzzi: 3h/6x3 $46.000 | Noche $58.000 | 12h $58.000 | 24h $80.000
 
-PROMOCIÓN DE AGOSTO 2026: La habitación SIMPLE por MOMENTO (3 horas) está a $24.000, TODOS los días y a TODA hora (mismo precio semana y fin de semana). Aplica SOLO a Simple 3 horas (no a 6x3, ni noche, ni 12h, ni 24h, ni a VIP o Jacuzzi).
-- Si el cliente pregunta por una habitación SIMPLE, o por precios de simple, MENCIONA esta promoción: "La Simple por 3 horas está en promoción a $24.000 este mes 😊".
-- La imagen de tarifas muestra el precio normal ($29.000/$31.000); la promo es un precio especial de agosto más bajo. Al mencionarla, avísalo así para no confundir (igual que con las 12 horas).
-IMPORTANTE: El precio de 3h y 6x3 es fijo — no cambia según la hora del día. Solo varía entre semana y fin de semana (excepto la Simple 3h en promo, que es $24.000 todos los días).
+PROMOCIÓN DE SEPTIEMBRE 2026: La habitación SIMPLE por MOMENTO (3 horas) está a $26.000, TODOS los días y a TODA hora (mismo precio semana y fin de semana). Aplica SOLO a Simple 3 horas (no a 6x3, ni noche, ni 12h, ni 24h, ni a VIP o Jacuzzi).
+- Si el cliente pregunta por una habitación SIMPLE, o por precios de simple, MENCIONA esta promoción: "La Simple por 3 horas está en promoción a $26.000 este mes 😊".
+- La imagen de tarifas muestra el precio normal ($29.000/$31.000); la promo es un precio especial de septiembre más bajo. Al mencionarla, avísalo así para no confundir (igual que con las 12 horas).
+IMPORTANTE: El precio de 3h y 6x3 es fijo — no cambia según la hora del día. Solo varía entre semana y fin de semana (excepto la Simple 3h en promo, que es $26.000 todos los días).
 NOTA: Noche y 12 horas tienen el mismo precio pero son paquetes distintos. Noche: entrada 22:00-12:00, salida siempre 12:00. 12 horas: 12h corridas desde cualquier hora.
 
 
@@ -745,10 +745,10 @@ REGLAS:
 
 // ── Tabla de precios y duraciones ────────────────────────────
 const PRECIOS = {
-  // PROMO AGOSTO 2026: Simple 3h (Momento) a $24.000 todos los días. Revertir el 1 de septiembre:
+  // PROMO SEPTIEMBRE 2026: Simple 3h (Momento) a $26.000 todos los días. Revertir el 1 de octubre:
   //   simple_3h_semana original 29000 | simple_3h_finde original 31000
-  simple_3h_semana: 24000, simple_6x3_semana: 29000, simple_noche_semana: 37000, simple_12h_semana: 37000, simple_24h: 60000,
-  simple_3h_finde:  24000, simple_6x3_finde:  31000, simple_noche_finde:  41000, simple_12h_finde: 41000,
+  simple_3h_semana: 26000, simple_6x3_semana: 29000, simple_noche_semana: 37000, simple_12h_semana: 37000, simple_24h: 60000,
+  simple_3h_finde:  26000, simple_6x3_finde:  31000, simple_noche_finde:  41000, simple_12h_finde: 41000,
   vip_3h_semana:    34000, vip_6x3_semana:    34000, vip_noche_semana:    44000, vip_12h_semana: 44000, vip_24h: 70000,
   vip_3h_finde:     39000, vip_6x3_finde:     39000, vip_noche_finde:     48000, vip_12h_finde: 48000,
   jacuzzi_3h_semana: 42000, jacuzzi_6x3_semana: 42000, jacuzzi_noche_semana: 55000, jacuzzi_12h_semana: 55000, jacuzzi_24h: 80000,
