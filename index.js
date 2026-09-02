@@ -53,14 +53,7 @@ const mensajesDelBot = new Set(); // IDs de mensajes enviados por el bot (para d
 
 const cliente = new Client({
   authStrategy: new LocalAuth({ dataPath: './session' }),
-  // CONGELAR la versión de WhatsApp Web: WhatsApp publica varias versiones al día y
-  // sus cambios internos rompen la librería (error "r" en evaluate con chats @lid).
-  // Versión del 28 de agosto 2026 (Camino A: con rodaje, tras rechazo de la del 1-sep).
-  // Si la copia no se pudiera cargar, la librería cae sola a la versión actual (nunca peor que hoy).
-  webVersionCache: {
-    type: 'remote',
-    remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1046291534-alpha.html',
-  },
+  // Sin webVersionCache: con la librería 1.34.2 se deja que use su versión de WhatsApp Web compatible.
   puppeteer: {
     headless: true,
     executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
