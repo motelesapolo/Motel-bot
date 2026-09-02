@@ -186,6 +186,22 @@ cliente.on('message', async (mensaje) => {
     if (mensajesProcesados.size > 1000) mensajesProcesados.clear();
   }
 
+  // Si el bot está en plena reconexión (tras el LOGOUT del bug), esperar hasta 15s a que
+  // la conexión esté lista ANTES de procesar/responder. Evita el error 'getChat undefined'
+  // al intentar enviar sobre una conexión a medio reconectar.
+  if (!botConectado) {
+    let esperado = 0;
+    while (!botConectado && esperado < 15000) {
+      await new Promise(r => setTimeout(r, 1000));
+      esperado += 1000;
+    }
+    if (!botConectado) {
+      console.log('⏳ Bot aún reconectando — se procesará el mensaje cuando el cliente reenvíe');
+      return;
+    }
+    console.log('✅ Reconexión completa — procesando mensaje pendiente');
+  }
+
   const rawFrom = mensaje.from || '';
   let telefono = rawFrom.replace('@c.us', '').replace('@lid', '');
   // Ignorar mensajes del número del motel (número normal y LID)
