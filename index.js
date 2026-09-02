@@ -53,7 +53,10 @@ const mensajesDelBot = new Set(); // IDs de mensajes enviados por el bot (para d
 
 const cliente = new Client({
   authStrategy: new LocalAuth({ dataPath: './session' }),
-  // Sin webVersionCache: con la librería 1.34.2 se deja que use su versión de WhatsApp Web compatible.
+  takeoverOnConflict: true,        // si otra sesión interfiere, este cliente toma el control
+  takeoverTimeoutMs: 10000,
+  authTimeoutMs: 90000,            // más tiempo para completar la carga antes de rendirse
+  qrMaxRetries: 5,
   puppeteer: {
     headless: true,
     executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
@@ -114,6 +117,7 @@ cliente.on('message_create', async (mensaje) => {
 });
 
 cliente.on('qr', (qr) => { qrActual = qr; botConectado = false; console.log('📱 QR generado - abre la URL de Railway'); });
+cliente.on('loading_screen', (percent, message) => { console.log(`⏳ Cargando WhatsApp: ${percent}% ${message || ''}`); });
 cliente.on('authenticated', () => { qrActual = null; console.log('✅ WhatsApp autenticado'); });
 cliente.on('ready', () => {
   console.log(`🏨 ${process.env.MOTEL_NOMBRE} - LISTO`);
