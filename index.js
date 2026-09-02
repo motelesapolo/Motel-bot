@@ -126,10 +126,12 @@ cliente.on('authenticated', () => { qrActual = null; console.log('✅ WhatsApp a
 cliente.on('ready', () => {
   console.log(`🏨 ${process.env.MOTEL_NOMBRE} - LISTO`);
   botConectado = true; qrActual = null;
+  reconexionesSeguidas = 0; // reconectó bien → resetear el contador
   setClienteWhatsApp(cliente);
 });
 cliente.on('auth_failure', (msg) => console.error('❌ Auth failure:', msg));
 let reconectando = false; // evita reinicios simultáneos que se pisan entre sí
+let reconexionesSeguidas = 0; // cuenta reconexiones fallidas seguidas; si pasan de 5, se pide QR
 cliente.on('disconnected', async (reason) => {
   console.log('📵 Desconectado:', reason);
   botConectado = false;
@@ -140,21 +142,25 @@ cliente.on('disconnected', async (reason) => {
   try { await cliente.destroy(); console.log('🧹 Cliente cerrado limpiamente'); }
   catch (e) { console.error('Error cerrando cliente:', e.message); }
 
-  if (reason === 'LOGOUT') {
-    console.log('🔄 LOGOUT detectado — limpiando sesión...');
+  // IMPORTANTE: NO borrar la sesión al desconectar. La mayoría de estos LOGOUT son por el bug
+  // de la librería cuando WhatsApp Web se auto-recarga (no un logout real del usuario).
+  // Si conservamos la sesión, el bot puede reconectar SOLO, sin pedir QR de nuevo.
+  // Solo se pide QR si la reconexión falla varias veces seguidas (ahí sí la sesión está muerta).
+  reconexionesSeguidas++;
+  if (reconexionesSeguidas <= 5) {
+    console.log(`🔄 Reconectando sin borrar sesión (intento ${reconexionesSeguidas}/5, sin QR)...`);
+    setTimeout(() => {
+      cliente.initialize().catch(e => { console.error('Reinit falló:', e.message); process.exit(1); });
+      reconectando = false;
+    }, 5000);
+  } else {
+    // Ya falló 5 veces seguidas: la sesión probablemente está muerta de verdad → limpiar y salir para reescanear
+    console.log('⚠️ 5 reconexiones fallidas seguidas — la sesión parece muerta. Limpiando para reescanear QR.');
     const fs = require('fs');
     const path = require('path');
-    try {
-      fs.rmSync(path.join(__dirname, 'session'), { recursive: true, force: true });
-      console.log('🗑️ Sesión eliminada');
-    } catch (e) { console.error('Error eliminando sesión:', e.message); }
-    // Salir del proceso: Railway lo reinicia solo, con arranque 100% limpio (sin navegador zombie).
-    // Al volver, generará un QR nuevo y estable para escanear.
-    console.log('♻️ Saliendo para que Railway reinicie limpio. Escanea el QR nuevo al volver.');
+    try { fs.rmSync(path.join(__dirname, 'session'), { recursive: true, force: true }); console.log('🗑️ Sesión eliminada'); }
+    catch (e) { console.error('Error eliminando sesión:', e.message); }
     setTimeout(() => process.exit(0), 2000);
-  } else {
-    // Desconexión temporal (no logout): reintentar reconectar tras 10s
-    setTimeout(() => { cliente.initialize().catch(e => { console.error('Reinit falló:', e.message); process.exit(1); }); reconectando = false; }, 10000);
   }
 });
 
