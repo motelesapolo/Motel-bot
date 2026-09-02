@@ -53,6 +53,10 @@ const mensajesDelBot = new Set(); // IDs de mensajes enviados por el bot (para d
 
 const cliente = new Client({
   authStrategy: new LocalAuth({ dataPath: './session' }),
+  webVersionCache: {
+    type: 'remote',
+    remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1042790212-alpha.html',
+  },
   takeoverOnConflict: true,        // si otra sesión interfiere, este cliente toma el control
   takeoverTimeoutMs: 10000,
   authTimeoutMs: 90000,            // más tiempo para completar la carga antes de rendirse
