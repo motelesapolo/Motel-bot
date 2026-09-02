@@ -55,11 +55,11 @@ const cliente = new Client({
   authStrategy: new LocalAuth({ dataPath: './session' }),
   // CONGELAR la versión de WhatsApp Web: WhatsApp publica varias versiones al día y
   // sus cambios internos rompen la librería (error "r" en evaluate con chats @lid).
-  // Versión del 1 de septiembre 2026 (la más reciente; probando tras rechazo de WhatsApp).
+  // Versión del 28 de agosto 2026 (Camino A: con rodaje, tras rechazo de la del 1-sep).
   // Si la copia no se pudiera cargar, la librería cae sola a la versión actual (nunca peor que hoy).
   webVersionCache: {
     type: 'remote',
-    remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1046553522-alpha.html',
+    remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1046291534-alpha.html',
   },
   puppeteer: {
     headless: true,
