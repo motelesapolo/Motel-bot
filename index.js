@@ -2,6 +2,8 @@
 // index.js - Bot de WhatsApp para Motel (Chile)
 // ============================================
 require('dotenv').config();
+const fs = require('fs');
+const path = require('path');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const express = require('express');
 const { procesarMensaje, limpiarConversacion, setClienteWhatsApp, reactivarCliente, bloquearHabitacion, liberarHabitacion, getEstadoBloqueos } = require('./ia');
@@ -50,6 +52,18 @@ app.listen(PORT, () => console.log(`🌐 Servidor web activo en puerto ${PORT}`)
 
 // ── Cliente WhatsApp ──────────────────────────────────────────
 const mensajesDelBot = new Set(); // IDs de mensajes enviados por el bot (para distinguirlos de los del admin)
+
+// Un redeploy puede dejar en el Volume los candados del Chromium del contenedor
+// anterior. Solo se eliminan esos archivos temporales; la sesión se conserva.
+const perfilChromium = '/data/session/session';
+for (const candado of ['SingletonLock', 'SingletonSocket', 'SingletonCookie']) {
+  try {
+    fs.rmSync(path.join(perfilChromium, candado), { force: true });
+  } catch (error) {
+    console.warn(`⚠️ No se pudo limpiar ${candado}: ${error.message}`);
+  }
+}
+console.log('🔓 Candados temporales de Chromium verificados');
 
 const cliente = new Client({
   authStrategy: new LocalAuth({ dataPath: '/data/session' }), // Volume persistente de Railway: la sesión sobrevive los deploys
