@@ -117,8 +117,6 @@ cliente.on('message_create', async (mensaje) => {
 
 cliente.on('qr', (qr) => {
   qrActual = qr; botConectado = false;
-  esperandoEscaneo = true; // hay un QR activo esperando que lo escaneen
-  reconexionesSeguidas = 0; // el QR resetea el contador: ya no estamos en loop de reconexión
   console.log('📱 QR generado - abre la URL de Railway y escanéalo');
 });
 cliente.on('loading_screen', (percent, message) => { console.log(`⏳ Cargando WhatsApp: ${percent}% ${message || ''}`); });
@@ -126,46 +124,26 @@ cliente.on('authenticated', () => { qrActual = null; console.log('✅ WhatsApp a
 cliente.on('ready', () => {
   console.log(`🏨 ${process.env.MOTEL_NOMBRE} - LISTO`);
   botConectado = true; qrActual = null;
-  reconexionesSeguidas = 0; esperandoEscaneo = false; // reconectó bien → resetear
   setClienteWhatsApp(cliente);
 });
 cliente.on('auth_failure', (msg) => console.error('❌ Auth failure:', msg));
-let reconectando = false; // evita reinicios simultáneos que se pisan entre sí
-let reconexionesSeguidas = 0; // cuenta reconexiones fallidas seguidas
-let esperandoEscaneo = false; // true cuando hay un QR activo esperando escaneo (sesión murió)
-cliente.on('disconnected', async (reason) => {
-  console.log('📵 Desconectado:', reason);
+
+// Recuperación mínima y segura para Railway:
+// no reutilizar el mismo Client después de destroy(), porque Puppeteer puede dejar
+// tareas internas activas y generar TargetCloseError/Execution context destroyed.
+// Railway levanta un proceso completamente nuevo y LocalAuth recupera /data/session.
+let reinicioProgramado = false;
+function programarReinicio(motivo, esperaMs = 4000) {
+  if (reinicioProgramado) return;
+  reinicioProgramado = true;
   botConectado = false;
-  if (reconectando) { console.log('⏳ Ya se está reconectando, ignorando evento duplicado'); return; }
-  reconectando = true;
+  console.error(`♻️ Reinicio limpio programado: ${motivo}`);
+  setTimeout(() => process.exit(1), esperaMs);
+}
 
-  // Cerrar el navegador ANTES de tocar la sesión, para no chocar con "browser already running"
-  try { await cliente.destroy(); console.log('🧹 Cliente cerrado limpiamente'); }
-  catch (e) { console.error('Error cerrando cliente:', e.message); }
-
-  // Reconexión ante el bug de WhatsApp Web (Execution context destroyed).
-  // NO borramos la sesión: si sigue válida, reconecta solo y vuelve a LISTO sin QR.
-  // Si la sesión murió, aparecerá el evento 'qr' (que deja el QR estable esperando escaneo,
-  // sin contar como fallo). Solo tratamos como "sesión muerta" el caso de 'Max qrcode retries'.
-  if (reason === 'Max qrcode retries reached') {
-    // Nadie escaneó el QR a tiempo: dejar el QR nuevo esperando, sin morir ni borrar nada.
-    console.log('⏳ QR expiró sin escanear — reintentando mostrar QR. Escanéalo desde la URL de Railway.');
-    reconectando = false;
-    setTimeout(() => { cliente.initialize().catch(e => { console.error('Reinit falló:', e.message); }); }, 3000);
-    return;
-  }
-  reconexionesSeguidas++;
-  if (reconexionesSeguidas <= 10) {
-    console.log(`🔄 Reconectando sin borrar sesión (intento ${reconexionesSeguidas}, sin QR)...`);
-    setTimeout(() => {
-      cliente.initialize().catch(e => { console.error('Reinit falló:', e.message); });
-      reconectando = false;
-    }, 5000);
-  } else {
-    // Muchas reconexiones fallidas y ni siquiera aparece QR: reiniciar el proceso limpio (Railway lo levanta).
-    console.log('⚠️ Demasiadas reconexiones fallidas — reiniciando proceso limpio (sin borrar sesión).');
-    setTimeout(() => process.exit(0), 2000);
-  }
+cliente.on('disconnected', (reason) => {
+  console.log('📵 Desconectado:', reason);
+  programarReinicio(`WhatsApp desconectado (${reason})`);
 });
 
 // ── Mensajes ──────────────────────────────────────────────────
@@ -530,7 +508,26 @@ Usa /libre para reactivar.`);
 
 console.log(`🚀 Iniciando bot...`);
 console.log(`🏨 Motel: ${process.env.MOTEL_NOMBRE || 'Sin configurar'}`);
+console.log(`🧩 Node: ${process.version}`);
+console.log(`🧩 whatsapp-web.js: ${require('whatsapp-web.js/package.json').version}`);
 console.log('━'.repeat(50));
 
-cliente.initialize().catch(err => { console.error('Error al iniciar:', err); process.exit(1); });
-process.on('unhandledRejection', (reason) => console.error('Error no manejado:', reason));
+// Puppeteer puede rechazar una promesa interna cuando WhatsApp Web navega o recarga.
+// Registrar el error y reiniciar el proceso evita dejar Express vivo con el bot muerto.
+process.on('unhandledRejection', (reason) => {
+  console.error('Error no manejado:', reason);
+  const detalle = reason?.stack || reason?.message || String(reason);
+  if (/Execution context was destroyed|TargetCloseError|Target closed|Protocol error/i.test(detalle)) {
+    programarReinicio('Puppeteer perdió el contexto de WhatsApp Web', 2500);
+  }
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('Excepción no controlada:', error);
+  programarReinicio(error?.message || 'excepción no controlada', 2500);
+});
+
+cliente.initialize().catch(err => {
+  console.error('Error al iniciar:', err);
+  programarReinicio(`falló initialize(): ${err.message}`, 2500);
+});
