@@ -8,7 +8,7 @@
     "dev": "nodemon index.js"
   },
   "dependencies": {
-    "whatsapp-web.js": "1.32.0",
+    "whatsapp-web.js": "https://github.com/wwebjs/whatsapp-web.js/archive/942d236a11ad68807308b058303ba5256915979c.tar.gz",
     "qrcode-terminal": "^0.12.0",
     "@anthropic-ai/sdk": "^0.24.0",
     "googleapis": "^140.0.0",

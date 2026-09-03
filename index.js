@@ -510,6 +510,7 @@ console.log(`🚀 Iniciando bot...`);
 console.log(`🏨 Motel: ${process.env.MOTEL_NOMBRE || 'Sin configurar'}`);
 console.log(`🧩 Node: ${process.version}`);
 console.log(`🧩 whatsapp-web.js: ${require('whatsapp-web.js/package.json').version}`);
+console.log('🛠️ Corrección oficial de navegación: 942d236');
 console.log('━'.repeat(50));
 
 // Puppeteer puede rechazar una promesa interna cuando WhatsApp Web navega o recarga.
