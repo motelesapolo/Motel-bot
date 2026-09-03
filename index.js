@@ -14,11 +14,11 @@ const PORT = process.env.PORT || 3000;
 let qrActual = null;
 let botConectado = false;
 let botPausado = false;
-let numeroPrueba = null; // Cuando está activo, solo responde a este número
-const pausasPorAdmin = new Map(); // telefono → timestamp de pausa por respuesta admin
-const mensajesProcesados = new Set(); // IDs de mensajes ya procesados para evitar duplicados
-const procesandoCliente = new Map();   // telefono → { timer, cancelar } del debounce
-const mensajesPendientes = new Map();  // telefono → array de textos acumulados
+let numeroPrueba = null;
+const pausasPorAdmin = new Map();
+const mensajesProcesados = new Set();
+const procesandoCliente = new Map();
+const mensajesPendientes = new Map();
 
 app.get('/', (req, res) => {
   if (botConectado) {
@@ -47,502 +47,1020 @@ app.get('/', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ ok: true, conectado: botConectado, pausado: botPausado }));
-app.listen(PORT, () => console.log(`🌐 Servidor web activo en puerto ${PORT}`));
+app.get('/health', (req, res) => res.json({
+  ok: true,
+  conectado: botConectado,
+  pausado: botPausado
+}));
+
+app.listen(PORT, () => {
+  console.log(`🌐 Servidor web activo en puerto ${PORT}`);
+});
 
 // ── Cliente WhatsApp ──────────────────────────────────────────
-const mensajesDelBot = new Set(); // IDs de mensajes enviados por el bot (para distinguirlos de los del admin)
+const mensajesDelBot = new Set();
 
-// Un redeploy puede dejar en el Volume los candados del Chromium del contenedor
-// anterior. Solo se eliminan esos archivos temporales; la sesión se conserva.
+// Un redeploy puede dejar en el Volume los candados del Chromium
+// del contenedor anterior. Solo se eliminan estos archivos
+// temporales; la sesión se conserva.
 const perfilChromium = '/data/session/session';
-for (const candado of ['SingletonLock', 'SingletonSocket', 'SingletonCookie']) {
+
+for (const candado of [
+  'SingletonLock',
+  'SingletonSocket',
+  'SingletonCookie'
+]) {
   try {
-    fs.rmSync(path.join(perfilChromium, candado), { force: true });
+    fs.rmSync(path.join(perfilChromium, candado), {
+      force: true
+    });
   } catch (error) {
-    console.warn(`⚠️ No se pudo limpiar ${candado}: ${error.message}`);
+    console.warn(
+      `⚠️ No se pudo limpiar ${candado}: ${error.message}`
+    );
   }
 }
+
 console.log('🔓 Candados temporales de Chromium verificados');
 
 const cliente = new Client({
-  authStrategy: new LocalAuth({ dataPath: '/data/session' }), // Volume persistente de Railway: la sesión sobrevive los deploys
-  takeoverOnConflict: true,        // si otra sesión interfiere, este cliente toma el control
-  takeoverTimeoutMs: 10000,
-  authTimeoutMs: 90000,            // más tiempo para completar la carga antes de rendirse
+  authStrategy: new LocalAuth({
+    dataPath: '/data/session'
+  }),
+  authTimeoutMs: 90000,
   puppeteer: {
     headless: true,
-    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-    args: ['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage',
-           '--disable-accelerated-2d-canvas','--no-first-run','--disable-gpu'],
-  },
+    executablePath:
+      process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-accelerated-2d-canvas',
+      '--no-first-run',
+      '--disable-gpu'
+    ]
+  }
 });
 
-// Envolver sendMessage: todo mensaje que envía el BOT queda registrado por su ID,
-// para que el detector de respuestas manuales del admin no lo confunda.
-const _sendMessageOriginal = cliente.sendMessage.bind(cliente);
-const ultimoEnvioBot = new Map(); // chat destino → timestamp del último INTENTO de envío del bot
+// Registrar los mensajes enviados por el bot para que no sean
+// confundidos con respuestas manuales del administrador.
+const _sendMessageOriginal =
+  cliente.sendMessage.bind(cliente);
+
+const ultimoEnvioBot = new Map();
+
 cliente.sendMessage = async (...args) => {
-  // Registrar el intento ANTES de enviar: si el envío lanza error pero WhatsApp igual
-  // despacha el mensaje (bug conocido de la librería), el detector de pausa sabrá
-  // que ese fromMe vino del bot y no del admin.
   try {
-    const destino = String(args[0] || '').replace('@c.us', '').replace('@lid', '');
+    const destino = String(args[0] || '')
+      .replace('@c.us', '')
+      .replace('@lid', '');
+
     if (destino) {
       ultimoEnvioBot.set(destino, Date.now());
-      if (ultimoEnvioBot.size > 300) ultimoEnvioBot.clear();
+
+      if (ultimoEnvioBot.size > 300) {
+        ultimoEnvioBot.clear();
+      }
     }
-  } catch (e) { /* nunca bloquear un envío por el registro */ }
+  } catch (error) {
+    // El registro nunca debe impedir el envío.
+  }
+
   const msg = await _sendMessageOriginal(...args);
   const id = msg?.id?._serialized || msg?.id?.id;
+
   if (id) {
     mensajesDelBot.add(id);
-    if (mensajesDelBot.size > 500) mensajesDelBot.clear();
+
+    if (mensajesDelBot.size > 500) {
+      mensajesDelBot.clear();
+    }
   }
+
   return msg;
 };
 
-// PAUSA POR RESPUESTA MANUAL DEL ADMIN:
-// Los mensajes propios (fromMe) NO disparan el evento 'message' en whatsapp-web.js,
-// solo 'message_create'. Por eso la pausa se detecta aquí.
+// Detectar respuestas manuales del administrador.
 cliente.on('message_create', async (mensaje) => {
   try {
     if (!mensaje.fromMe) return;
-    const id = mensaje.id?._serialized || mensaje.id?.id;
-    // Esperar 2s para que, si el mensaje lo envió el bot, su ID alcance a registrarse
-    await new Promise(r => setTimeout(r, 2000));
-    if (id && mensajesDelBot.has(id)) return; // lo envió el bot → no pausar
-    // Ignorar mensajes AUTOMÁTICOS nativos de WhatsApp Business (saludo de bienvenida,
-    // mensaje de ausencia): los envía la app sola y NO son el admin respondiendo a mano.
-    const cuerpoFromMe = (mensaje.body || '').toLowerCase();
-    if (cuerpoFromMe.includes('bienvenid') || cuerpoFromMe.includes('te esperamos')) return;
-    const destinatario = (mensaje.to || '').replace('@c.us', '').replace('@lid', '');
-    if (!destinatario || destinatario.includes('@g.us') || destinatario.includes('status')) return;
-    // GUARDA: si el bot intentó enviar algo a este mismo chat hace menos de 15s,
-    // este fromMe es casi seguro del bot (envío con error no registrado) → no pausar.
-    const intentoReciente = ultimoEnvioBot.get(destinatario);
-    if (intentoReciente && (Date.now() - intentoReciente) < 15000) return;
+
+    const id =
+      mensaje.id?._serialized || mensaje.id?.id;
+
+    await new Promise(resolve =>
+      setTimeout(resolve, 2000)
+    );
+
+    if (id && mensajesDelBot.has(id)) return;
+
+    const cuerpoFromMe =
+      (mensaje.body || '').toLowerCase();
+
+    if (
+      cuerpoFromMe.includes('bienvenid') ||
+      cuerpoFromMe.includes('te esperamos')
+    ) {
+      return;
+    }
+
+    const destinatario = (mensaje.to || '')
+      .replace('@c.us', '')
+      .replace('@lid', '');
+
+    if (
+      !destinatario ||
+      destinatario.includes('@g.us') ||
+      destinatario.includes('status')
+    ) {
+      return;
+    }
+
+    const intentoReciente =
+      ultimoEnvioBot.get(destinatario);
+
+    if (
+      intentoReciente &&
+      Date.now() - intentoReciente < 15000
+    ) {
+      return;
+    }
+
     pausasPorAdmin.set(destinatario, Date.now());
-    console.log(`⏸️ Bot pausado 10min para ${destinatario} — admin respondió manualmente`);
-  } catch (e) {
-    console.error('Error en message_create:', e.message);
+
+    console.log(
+      `⏸️ Bot pausado 10min para ${destinatario} — admin respondió manualmente`
+    );
+  } catch (error) {
+    console.error(
+      'Error en message_create:',
+      error.message
+    );
   }
 });
 
-cliente.on('qr', (qr) => {
-  qrActual = qr; botConectado = false;
-  console.log('📱 QR generado - abre la URL de Railway y escanéalo');
+cliente.on('qr', qr => {
+  qrActual = qr;
+  botConectado = false;
+
+  console.log(
+    '📱 QR generado - abre la URL de Railway y escanéalo'
+  );
 });
-cliente.on('loading_screen', (percent, message) => { console.log(`⏳ Cargando WhatsApp: ${percent}% ${message || ''}`); });
-cliente.on('authenticated', () => { qrActual = null; console.log('✅ WhatsApp autenticado'); });
+
+cliente.on('loading_screen', (percent, message) => {
+  console.log(
+    `⏳ Cargando WhatsApp: ${percent}% ${message || ''}`
+  );
+});
+
+cliente.on('authenticated', () => {
+  qrActual = null;
+  console.log('✅ WhatsApp autenticado');
+});
+
 cliente.on('ready', () => {
-  console.log(`🏨 ${process.env.MOTEL_NOMBRE} - LISTO`);
-  botConectado = true; qrActual = null;
+  if (botConectado) {
+    console.log('ℹ️ Evento LISTO repetido ignorado');
+    return;
+  }
+
+  console.log(
+    `🏨 ${process.env.MOTEL_NOMBRE} - LISTO`
+  );
+
+  botConectado = true;
+  qrActual = null;
   setClienteWhatsApp(cliente);
 });
-cliente.on('auth_failure', (msg) => console.error('❌ Auth failure:', msg));
 
-// Recuperación mínima y segura para Railway:
-// no reutilizar el mismo Client después de destroy(), porque Puppeteer puede dejar
-// tareas internas activas y generar TargetCloseError/Execution context destroyed.
-// Railway levanta un proceso completamente nuevo y LocalAuth recupera /data/session.
+cliente.on('auth_failure', msg => {
+  console.error('❌ Auth failure:', msg);
+});
+
+// Railway debe iniciar un proceso completamente nuevo ante una
+// desconexión. LocalAuth recuperará la sesión desde /data/session.
 let reinicioProgramado = false;
+
 function programarReinicio(motivo, esperaMs = 4000) {
   if (reinicioProgramado) return;
+
   reinicioProgramado = true;
   botConectado = false;
-  console.error(`♻️ Reinicio limpio programado: ${motivo}`);
+
+  console.error(
+    `♻️ Reinicio limpio programado: ${motivo}`
+  );
+
   setTimeout(() => process.exit(1), esperaMs);
 }
 
-cliente.on('disconnected', (reason) => {
+cliente.on('disconnected', reason => {
   console.log('📵 Desconectado:', reason);
-  programarReinicio(`WhatsApp desconectado (${reason})`);
+
+  programarReinicio(
+    `WhatsApp desconectado (${reason})`
+  );
 });
 
 // ── Mensajes ──────────────────────────────────────────────────
-cliente.on('message', async (mensaje) => {
+cliente.on('message', async mensaje => {
   if (mensaje.from.includes('@g.us')) return;
-  if (mensaje.fromMe) return; // los mensajes propios se manejan en message_create
+  if (mensaje.fromMe) return;
   if (mensaje.from === 'status@broadcast') return;
-  // Filtrar newsletters, canales y mensajes de sistema que no tienen estructura normal
   if (mensaje.from.includes('@newsletter')) return;
-  if (mensaje.type === 'e2e_notification' || mensaje.type === 'notification_template') return;
-  if (!mensaje.from) return;
 
-  // Evitar procesar el mismo mensaje dos veces
-  const msgId = mensaje.id?.id || mensaje.id?._serialized || '';
-  if (msgId && mensajesProcesados.has(msgId)) {
-    console.log(`⚠️ Mensaje duplicado ignorado: ${msgId}`);
+  if (
+    mensaje.type === 'e2e_notification' ||
+    mensaje.type === 'notification_template'
+  ) {
     return;
   }
-  if (msgId) {
-    mensajesProcesados.add(msgId);
-    // Limpiar mensajes viejos cada 1000 para no acumular memoria
-    if (mensajesProcesados.size > 1000) mensajesProcesados.clear();
+
+  if (!mensaje.from) return;
+
+  const msgId =
+    mensaje.id?.id ||
+    mensaje.id?._serialized ||
+    '';
+
+  if (
+    msgId &&
+    mensajesProcesados.has(msgId)
+  ) {
+    console.log(
+      `⚠️ Mensaje duplicado ignorado: ${msgId}`
+    );
+    return;
   }
 
-  // Si el bot está en plena reconexión (tras el LOGOUT del bug), esperar hasta 15s a que
-  // la conexión esté lista ANTES de procesar/responder. Evita el error 'getChat undefined'
-  // al intentar enviar sobre una conexión a medio reconectar.
+  if (msgId) {
+    mensajesProcesados.add(msgId);
+
+    if (mensajesProcesados.size > 1000) {
+      mensajesProcesados.clear();
+    }
+  }
+
   if (!botConectado) {
     let esperado = 0;
-    while (!botConectado && esperado < 15000) {
-      await new Promise(r => setTimeout(r, 1000));
+
+    while (
+      !botConectado &&
+      esperado < 15000
+    ) {
+      await new Promise(resolve =>
+        setTimeout(resolve, 1000)
+      );
+
       esperado += 1000;
     }
+
     if (!botConectado) {
-      console.log('⏳ Bot aún reconectando — se procesará el mensaje cuando el cliente reenvíe');
+      console.log(
+        '⏳ Bot aún reconectando — se procesará el mensaje cuando el cliente reenvíe'
+      );
       return;
     }
-    console.log('✅ Reconexión completa — procesando mensaje pendiente');
+
+    console.log(
+      '✅ Reconexión completa — procesando mensaje pendiente'
+    );
   }
 
   const rawFrom = mensaje.from || '';
-  let telefono = rawFrom.replace('@c.us', '').replace('@lid', '');
-  // Ignorar mensajes del número del motel (número normal y LID)
-  const NUMERO_MOTEL = (process.env.EMPRESA_NUMERO || '56945676410');
+
+  let telefono = rawFrom
+    .replace('@c.us', '')
+    .replace('@lid', '');
+
+  const NUMERO_MOTEL =
+    process.env.EMPRESA_NUMERO || '56945676410';
+
   const LID_MOTEL = '160009157619778';
-  if (telefono === NUMERO_MOTEL || telefono === LID_MOTEL) return;
-  // Mapear LIDs conocidos al número real
-  const LID_MAP = { '202902928908358': '56991655665', '217274023702535': process.env.ADMIN_NUMERO || '56949716039' };
-  if (LID_MAP[telefono]) telefono = LID_MAP[telefono];
-  // Detectar mensaje de voz (ptt = push-to-talk) o audio
-  if (mensaje.type === 'ptt' || mensaje.type === 'audio') {
-    console.log(`🎤 Mensaje de voz de ${telefono} - respondiendo automáticamente`);
-    await mensaje.reply('Hola 👋 Lo sentimos, no podemos atender mensajes de voz. Por favor escríbenos tu consulta y con gusto te ayudamos 😊');
+
+  if (
+    telefono === NUMERO_MOTEL ||
+    telefono === LID_MOTEL
+  ) {
     return;
   }
 
-  // Ignorar mensajes que son solo imagen/video/sticker sin texto
-  if ((mensaje.type === 'image' || mensaje.type === 'video' || mensaje.type === 'sticker') && !mensaje.body?.trim()) return;
+  const LID_MAP = {
+    '202902928908358': '56991655665',
+    '217274023702535':
+      process.env.ADMIN_NUMERO || '56949716039'
+  };
+
+  if (LID_MAP[telefono]) {
+    telefono = LID_MAP[telefono];
+  }
+
+  if (
+    mensaje.type === 'ptt' ||
+    mensaje.type === 'audio'
+  ) {
+    console.log(
+      `🎤 Mensaje de voz de ${telefono} - respondiendo automáticamente`
+    );
+
+    await mensaje.reply(
+      'Hola 👋 Lo sentimos, no podemos atender mensajes de voz. Por favor escríbenos tu consulta y con gusto te ayudamos 😊'
+    );
+
+    return;
+  }
+
+  if (
+    (
+      mensaje.type === 'image' ||
+      mensaje.type === 'video' ||
+      mensaje.type === 'sticker'
+    ) &&
+    !mensaje.body?.trim()
+  ) {
+    return;
+  }
 
   const texto = mensaje.body?.trim();
+
   if (!texto) return;
 
-  // Si el cliente hace reply a una imagen preguntando por disponibilidad específica
   if (mensaje.hasQuotedMsg) {
-    const quoted = await mensaje.getQuotedMessage().catch(() => null);
-    if (quoted && quoted.type === 'image' && quoted.fromMe) {
-      // Solo transferir si pregunta por habitación específica (disponibilidad, número, etc.)
+    const quoted =
+      await mensaje
+        .getQuotedMessage()
+        .catch(() => null);
+
+    if (
+      quoted &&
+      quoted.type === 'image' &&
+      quoted.fromMe
+    ) {
       const textLower = texto.toLowerCase();
-      const preguntaHab = textLower.includes('disponib') || textLower.includes('esa habitac') || 
-                          textLower.includes('ese cuarto') || textLower.includes('número') ||
-                          textLower.includes('la del') || textLower.includes('esa pieza');
+
+      const preguntaHab =
+        textLower.includes('disponib') ||
+        textLower.includes('esa habitac') ||
+        textLower.includes('ese cuarto') ||
+        textLower.includes('número') ||
+        textLower.includes('la del') ||
+        textLower.includes('esa pieza');
+
       if (preguntaHab) {
         const chatId = mensaje.from;
-        await cliente.sendMessage(chatId, 'Para consultas sobre una habitación específica, un ejecutivo te atenderá en breve 😊 Estamos recibiendo mensajes por orden de llegada.');
+
+        await cliente.sendMessage(
+          chatId,
+          'Para consultas sobre una habitación específica, un ejecutivo te atenderá en breve 😊 Estamos recibiendo mensajes por orden de llegada.'
+        );
+
         return;
       }
     }
   }
 
-  console.log(`📩 [${new Date().toLocaleTimeString('es-CL')}] De ${telefono}: ${texto}`);
+  console.log(
+    `📩 [${new Date().toLocaleTimeString('es-CL')}] De ${telefono}: ${texto}`
+  );
 
-  // Algunos números llegan con formato @lid - mapear al número real
-  const LID_ADMINS = ['202902928908358', '217274023702535']; // @lid admins
-  const ADMINS = [process.env.ADMIN_NUMERO, '56991655665', '56999644093', ...LID_ADMINS].filter(Boolean);
+  const LID_ADMINS = [
+    '202902928908358',
+    '217274023702535'
+  ];
+
+  const ADMINS = [
+    process.env.ADMIN_NUMERO,
+    '56991655665',
+    '56999644093',
+    ...LID_ADMINS
+  ].filter(Boolean);
 
   // ── Comandos Admin ────────────────────────────────────────
   if (ADMINS.includes(telefono)) {
     if (texto === '/desactivar') {
       botPausado = true;
-      await mensaje.reply('⏸️ *Bot pausado globalmente.* Responde tú manualmente.\nEscribe /activar para reactivar.');
+
+      await mensaje.reply(
+        '⏸️ *Bot pausado globalmente.* Responde tú manualmente.\nEscribe /activar para reactivar.'
+      );
+
       return;
     }
+
     if (texto === '/activar') {
       botPausado = false;
-      await mensaje.reply('▶️ *Bot reactivado.* Vuelve a responder automáticamente.');
+
+      await mensaje.reply(
+        '▶️ *Bot reactivado.* Vuelve a responder automáticamente.'
+      );
+
       return;
     }
-    // Modo prueba - solo responde al número especificado
+
     if (texto.startsWith('/prueba')) {
       const num = texto.split(' ')[1];
+
       if (num) {
-        numeroPrueba = num.replace('+', '').replace(/\s/g, '');
-        await mensaje.reply(`🧪 *Modo prueba activado*\nSolo responderé al número: +${numeroPrueba}\nPara desactivar escribe /prueba_off`);
+        numeroPrueba = num
+          .replace('+', '')
+          .replace(/\s/g, '');
+
+        await mensaje.reply(
+          `🧪 *Modo prueba activado*\nSolo responderé al número: +${numeroPrueba}\nPara desactivar escribe /prueba_off`
+        );
       } else {
-        await mensaje.reply('❌ Debes indicar el número. Ejemplo: /prueba +56912345678');
+        await mensaje.reply(
+          '❌ Debes indicar el número. Ejemplo: /prueba +56912345678'
+        );
       }
+
       return;
     }
 
     if (texto === '/prueba_off') {
       numeroPrueba = null;
-      await mensaje.reply('✅ *Modo prueba desactivado*\nEl bot responde a todos normalmente.');
+
+      await mensaje.reply(
+        '✅ *Modo prueba desactivado*\nEl bot responde a todos normalmente.'
+      );
+
       return;
     }
 
     if (texto === '/estado') {
-      await mensaje.reply(`${botPausado ? '⏸️ PAUSADO' : '✅ ACTIVO'}${numeroPrueba ? `\n🧪 MODO PRUEBA: solo +${numeroPrueba}` : ''}\n🏨 ${process.env.MOTEL_NOMBRE}\n⏰ ${new Date().toLocaleString('es-CL', { timeZone: 'America/Santiago' })}\n\nComandos disponibles:\n/desactivar - Pausar bot\n/activar - Reactivar bot\n/limpiar - Reiniciar tu conversación\n/activar_cliente NUMERO - Reactivar bot para un cliente`);
+      await mensaje.reply(
+        `${botPausado ? '⏸️ PAUSADO' : '✅ ACTIVO'}${numeroPrueba ? `\n🧪 MODO PRUEBA: solo +${numeroPrueba}` : ''}\n🏨 ${process.env.MOTEL_NOMBRE}\n⏰ ${new Date().toLocaleString('es-CL', { timeZone: 'America/Santiago' })}\n\nComandos disponibles:\n/desactivar - Pausar bot\n/activar - Reactivar bot\n/limpiar - Reiniciar tu conversación\n/activar_cliente NUMERO - Reactivar bot para un cliente`
+      );
+
       return;
     }
+
     if (texto === '/limpiar') {
       limpiarConversacion(telefono);
-      await mensaje.reply('🧹 Conversación reiniciada.');
+
+      await mensaje.reply(
+        '🧹 Conversación reiniciada.'
+      );
+
       return;
     }
-    // Comandos de disponibilidad manual
+
     if (texto.startsWith('/ocupado')) {
       const partes = texto.split(' ');
-      const motel = (partes[1] || 'todo').toLowerCase();
-      const tipo  = partes[2] ? partes[2].toLowerCase() : null;
+      const motel =
+        (partes[1] || 'todo').toLowerCase();
+
+      const tipo = partes[2]
+        ? partes[2].toLowerCase()
+        : null;
+
       bloquearHabitacion(motel, tipo);
-      const mn = motel.includes('apolo') ? 'Apolo' : motel.includes('chateau') ? 'Le Chateau' : 'ambos moteles';
-      const tn = tipo ? ` — ${tipo.charAt(0).toUpperCase()+tipo.slice(1)}` : ' (todas)';
-      await mensaje.reply(`❌ Bloqueado: ${mn}${tn}
-Usa /libre para reactivar.`);
+
+      const mn = motel.includes('apolo')
+        ? 'Apolo'
+        : motel.includes('chateau')
+          ? 'Le Chateau'
+          : 'ambos moteles';
+
+      const tn = tipo
+        ? ` — ${tipo.charAt(0).toUpperCase() + tipo.slice(1)}`
+        : ' (todas)';
+
+      await mensaje.reply(
+        `❌ Bloqueado: ${mn}${tn}\nUsa /libre para reactivar.`
+      );
+
       return;
     }
+
     if (texto.startsWith('/libre')) {
       const partes = texto.split(' ');
-      const motel = (partes[1] || 'todo').toLowerCase();
-      const tipo  = partes[2] ? partes[2].toLowerCase() : null;
+      const motel =
+        (partes[1] || 'todo').toLowerCase();
+
+      const tipo = partes[2]
+        ? partes[2].toLowerCase()
+        : null;
+
       liberarHabitacion(motel, tipo);
-      const mn = motel.includes('apolo') ? 'Apolo' : motel.includes('chateau') ? 'Le Chateau' : 'ambos moteles';
-      const tn = tipo ? ` — ${tipo.charAt(0).toUpperCase()+tipo.slice(1)}` : ' (todas)';
-      await mensaje.reply(`✅ Liberado: ${mn}${tn}`);
+
+      const mn = motel.includes('apolo')
+        ? 'Apolo'
+        : motel.includes('chateau')
+          ? 'Le Chateau'
+          : 'ambos moteles';
+
+      const tn = tipo
+        ? ` — ${tipo.charAt(0).toUpperCase() + tipo.slice(1)}`
+        : ' (todas)';
+
+      await mensaje.reply(
+        `✅ Liberado: ${mn}${tn}`
+      );
+
       return;
     }
+
     if (texto === '/disponibilidad') {
-      await mensaje.reply(getEstadoBloqueos());
+      await mensaje.reply(
+        getEstadoBloqueos()
+      );
+
       return;
     }
-    // Reactivar bot para cliente específico
+
     if (texto.startsWith('/activar_cliente')) {
-      const numeroCliente = texto.split(' ')[1];
+      const numeroCliente =
+        texto.split(' ')[1];
+
       if (numeroCliente) {
         reactivarCliente(numeroCliente);
-        await mensaje.reply(`✅ Bot reactivado para el cliente ${numeroCliente}. Volverá a responder automáticamente.`);
+
+        await mensaje.reply(
+          `✅ Bot reactivado para el cliente ${numeroCliente}. Volverá a responder automáticamente.`
+        );
       } else {
-        await mensaje.reply('⚠️ Uso: /resume_cliente 56912345678');
+        await mensaje.reply(
+          '⚠️ Uso: /activar_cliente 56912345678'
+        );
       }
+
       return;
     }
-    // Si el admin escribe cualquier cosa que no sea comando, ignorar
+
     return;
   }
 
-  // Si está pausado globalmente, no responder
   if (botPausado) {
-    console.log(`⏸️ Bot pausado - mensaje de ${telefono} ignorado`);
+    console.log(
+      `⏸️ Bot pausado - mensaje de ${telefono} ignorado`
+    );
+
     return;
   }
 
-  // Si el admin respondió recientemente a este cliente, pausar 10 minutos
-  const pausaAdmin = pausasPorAdmin.get(telefono);
-  if (pausaAdmin && (Date.now() - pausaAdmin) < 10 * 60 * 1000) {
-    console.log(`⏸️ Bot pausado por respuesta admin — ignorando mensaje de ${telefono}`);
+  const pausaAdmin =
+    pausasPorAdmin.get(telefono);
+
+  if (
+    pausaAdmin &&
+    Date.now() - pausaAdmin < 10 * 60 * 1000
+  ) {
+    console.log(
+      `⏸️ Bot pausado por respuesta admin — ignorando mensaje de ${telefono}`
+    );
+
     return;
   } else if (pausaAdmin) {
-    pausasPorAdmin.delete(telefono); // Limpiar pausa expirada
+    pausasPorAdmin.delete(telefono);
   }
 
-  // Debounce: acumula mensajes rápidos y los procesa juntos después de 4s de silencio
-  if (!mensajesPendientes.has(telefono)) mensajesPendientes.set(telefono, []);
+  if (!mensajesPendientes.has(telefono)) {
+    mensajesPendientes.set(telefono, []);
+  }
+
   mensajesPendientes.get(telefono).push(texto);
 
-  // Cancelar el timer anterior y resolver su promesa limpiamente (evita promesas colgadas)
-  const prev = procesandoCliente.get(telefono);
+  const prev =
+    procesandoCliente.get(telefono);
+
   if (prev) {
     clearTimeout(prev.timer);
-    prev.cancelar(); // resuelve la promesa anterior con señal de cancelado
+    prev.cancelar();
   }
 
-  const debeContinuar = await new Promise(resolve => {
-    const timer = setTimeout(() => resolve(true), 7000);
-    procesandoCliente.set(telefono, { timer, cancelar: () => resolve(false) });
-  });
-  // Si fue cancelado por un mensaje más nuevo, este hilo termina aquí
+  const debeContinuar =
+    await new Promise(resolve => {
+      const timer = setTimeout(
+        () => resolve(true),
+        7000
+      );
+
+      procesandoCliente.set(telefono, {
+        timer,
+        cancelar: () => resolve(false)
+      });
+    });
+
   if (!debeContinuar) return;
+
   procesandoCliente.delete(telefono);
 
-  // Tomar todos los mensajes acumulados y unirlos
-  const pendientes = mensajesPendientes.get(telefono) || [];
+  const pendientes =
+    mensajesPendientes.get(telefono) || [];
+
   mensajesPendientes.delete(telefono);
-  // Si hay más de un mensaje acumulado, procesar solo el primero
-  // para evitar que preguntas posteriores se mezclen con confirmaciones de reserva
-  // Unir todos los mensajes acumulados en uno solo
+
   const textoFinal = pendientes.join(' ');
+
   if (pendientes.length > 1) {
-    console.log(`📨 Mensajes acumulados de ${telefono}: "${textoFinal}"`);
+    console.log(
+      `📨 Mensajes acumulados de ${telefono}: "${textoFinal}"`
+    );
   }
 
-  let chat;
   try {
-    chat = await mensaje.getChat();
-    await chat.sendStateTyping();
+    const palabras =
+      (textoFinal || texto).split(' ').length;
 
-    // Delay variable según largo del mensaje — simula tiempo de lectura humano
-    const palabras = (textoFinal || texto).split(' ').length;
-    const delayRespuesta = palabras <= 5 ? 2000 : palabras <= 15 ? 3000 : 4000;
-    await new Promise(r => setTimeout(r, delayRespuesta));
+    const delayRespuesta =
+      palabras <= 5
+        ? 2000
+        : palabras <= 15
+          ? 3000
+          : 4000;
 
-    const respuesta = await procesarMensaje(telefono, textoFinal || texto, numeroPrueba);
-    
-    // Si es null, el cliente está esperando agente - no responder
-    if (respuesta === null) {
-      await chat.clearState();
-      return;
-    }
+    await new Promise(resolve =>
+      setTimeout(resolve, delayRespuesta)
+    );
 
-    const pausa = Math.floor(Math.random() * 1000) + 800;
-    await new Promise(r => setTimeout(r, pausa));
+    const respuesta = await procesarMensaje(
+      telefono,
+      textoFinal || texto,
+      numeroPrueba
+    );
+
+    if (respuesta === null) return;
+
+    const pausa =
+      Math.floor(Math.random() * 1000) + 800;
+
+    await new Promise(resolve =>
+      setTimeout(resolve, pausa)
+    );
 
     const chatId = mensaje.from;
 
-    // Si la respuesta incluye tarifas, enviar la imagen primero y el texto después
-    if (respuesta && typeof respuesta === 'object' && respuesta.tarifas) {
-      const { MessageMedia } = require('whatsapp-web.js');
-      const path = require('path');
-      const fs = require('fs');
-      const rutaTarifas = path.join(__dirname, 'TARIFAS_APOLO.jpeg');
+    if (
+      respuesta &&
+      typeof respuesta === 'object' &&
+      respuesta.tarifas
+    ) {
+      const { MessageMedia } =
+        require('whatsapp-web.js');
+
+      const rutaTarifas = path.join(
+        __dirname,
+        'TARIFAS_APOLO.jpeg'
+      );
+
       if (fs.existsSync(rutaTarifas)) {
-        const media = MessageMedia.fromFilePath(rutaTarifas);
-        await cliente.sendMessage(chatId, media);
-        console.log(`📸 Tarifas enviadas a ${telefono}`);
+        const media =
+          MessageMedia.fromFilePath(rutaTarifas);
+
+        await cliente.sendMessage(
+          chatId,
+          media
+        );
+
+        console.log(
+          `📸 Tarifas enviadas a ${telefono}`
+        );
       } else {
-        console.error('❌ No se encontró TARIFAS_APOLO.jpeg');
+        console.error(
+          '❌ No se encontró TARIFAS_APOLO.jpeg'
+        );
       }
-      // Enviar el texto que acompaña (si existe) DESPUÉS de la imagen, con pausa
-      if (respuesta.texto && respuesta.texto.trim()) {
-        await new Promise(r => setTimeout(r, 1500));
-        await cliente.sendMessage(chatId, respuesta.texto);
+
+      if (
+        respuesta.texto &&
+        respuesta.texto.trim()
+      ) {
+        await new Promise(resolve =>
+          setTimeout(resolve, 1500)
+        );
+
+        await cliente.sendMessage(
+          chatId,
+          respuesta.texto
+        );
       }
-      await chat.clearState();
+
       return;
     }
 
-    // Si la respuesta incluye fotos, enviarlas
-    if (respuesta && typeof respuesta === 'object' && respuesta.fotos) {
-      const { texto: textoRespuesta, fotos } = respuesta;
-      const { MessageMedia } = require('whatsapp-web.js');
-      const path = require('path');
-      const fs = require('fs');
+    if (
+      respuesta &&
+      typeof respuesta === 'object' &&
+      respuesta.fotos
+    ) {
+      const {
+        texto: textoRespuesta,
+        fotos
+      } = respuesta;
 
-      // Función para enviar fotos de un tipo/motel específico
-      const enviarTipoFotos = async (motelId, tipo, cantidad) => {
-        const motelArch = motelId === 'lechateau' ? 'chateau' : motelId;
-        const motelLabel = motelId === 'lechateau' ? 'Le Chateau' : 'Apolo';
-        const nombreTipo = tipo.charAt(0).toUpperCase() + tipo.slice(1);
-        await cliente.sendMessage(chatId, `🛏️ ${nombreTipo} - Motel ${motelLabel}`);
-        for (let i = 1; i <= cantidad; i++) {
-          const rutaFoto = path.join(__dirname, 'fotos', `${motelArch}_${tipo}_${i}.jpeg`);
+      const { MessageMedia } =
+        require('whatsapp-web.js');
+
+      const enviarTipoFotos = async (
+        motelId,
+        tipo,
+        cantidad
+      ) => {
+        const motelArch =
+          motelId === 'lechateau'
+            ? 'chateau'
+            : motelId;
+
+        const motelLabel =
+          motelId === 'lechateau'
+            ? 'Le Chateau'
+            : 'Apolo';
+
+        const nombreTipo =
+          tipo.charAt(0).toUpperCase() +
+          tipo.slice(1);
+
+        await cliente.sendMessage(
+          chatId,
+          `🛏️ ${nombreTipo} - Motel ${motelLabel}`
+        );
+
+        for (
+          let i = 1;
+          i <= cantidad;
+          i++
+        ) {
+          const rutaFoto = path.join(
+            __dirname,
+            'fotos',
+            `${motelArch}_${tipo}_${i}.jpeg`
+          );
+
           if (fs.existsSync(rutaFoto)) {
             try {
-              await cliente.sendMessage(chatId, MessageMedia.fromFilePath(rutaFoto));
-              await new Promise(r => setTimeout(r, 800));
-            } catch (err) {
-              console.error(`❌ Error foto ${i} de ${tipo}:`, err.message);
+              await cliente.sendMessage(
+                chatId,
+                MessageMedia.fromFilePath(rutaFoto)
+              );
+
+              await new Promise(resolve =>
+                setTimeout(resolve, 800)
+              );
+            } catch (error) {
+              console.error(
+                `❌ Error foto ${i} de ${tipo}:`,
+                error.message
+              );
             }
           }
         }
       };
 
-      // Función para procesar un bloque de fotos
-      const procesarBloqueForotos = async (bloque) => {
-        const motelId = bloque.motel || 'apolo';
-        if (bloque.ambos) {
-          for (const mId of ['apolo', 'lechateau']) {
-            const datosMotel = bloque[mId];
-            if (datosMotel.todas && datosMotel.tipos) {
-              for (const { tipo, cantidad } of datosMotel.tipos) {
-                await enviarTipoFotos(mId, tipo, cantidad);
-                await new Promise(r => setTimeout(r, 1000));
+      const procesarBloqueForotos =
+        async bloque => {
+          const motelId =
+            bloque.motel || 'apolo';
+
+          if (bloque.ambos) {
+            for (
+              const mId of [
+                'apolo',
+                'lechateau'
+              ]
+            ) {
+              const datosMotel =
+                bloque[mId];
+
+              if (
+                datosMotel.todas &&
+                datosMotel.tipos
+              ) {
+                for (
+                  const {
+                    tipo,
+                    cantidad
+                  } of datosMotel.tipos
+                ) {
+                  await enviarTipoFotos(
+                    mId,
+                    tipo,
+                    cantidad
+                  );
+
+                  await new Promise(resolve =>
+                    setTimeout(resolve, 1000)
+                  );
+                }
+              } else {
+                await enviarTipoFotos(
+                  mId,
+                  datosMotel.tipo,
+                  datosMotel.cantidad
+                );
               }
-            } else {
-              await enviarTipoFotos(mId, datosMotel.tipo, datosMotel.cantidad);
-            }
-            await new Promise(r => setTimeout(r, 1500));
-          }
-        } else if (bloque.todas && bloque.tipos) {
-          for (const { tipo, cantidad } of bloque.tipos) {
-            await enviarTipoFotos(motelId, tipo, cantidad);
-            await new Promise(r => setTimeout(r, 1000));
-          }
-        } else {
-          await enviarTipoFotos(motelId, bloque.tipo, bloque.cantidad);
-        }
-      };
 
-      // Fotos primero — texto adicional después con pausa
-      if (fotos.multiple && fotos.lista) {
+              await new Promise(resolve =>
+                setTimeout(resolve, 1500)
+              );
+            }
+          } else if (
+            bloque.todas &&
+            bloque.tipos
+          ) {
+            for (
+              const {
+                tipo,
+                cantidad
+              } of bloque.tipos
+            ) {
+              await enviarTipoFotos(
+                motelId,
+                tipo,
+                cantidad
+              );
+
+              await new Promise(resolve =>
+                setTimeout(resolve, 1000)
+              );
+            }
+          } else {
+            await enviarTipoFotos(
+              motelId,
+              bloque.tipo,
+              bloque.cantidad
+            );
+          }
+        };
+
+      if (
+        fotos.multiple &&
+        fotos.lista
+      ) {
         for (const bloque of fotos.lista) {
-          await procesarBloqueForotos(bloque);
-          await new Promise(r => setTimeout(r, 800));
+          await procesarBloqueForotos(
+            bloque
+          );
+
+          await new Promise(resolve =>
+            setTimeout(resolve, 800)
+          );
         }
-        console.log(`📸 Múltiples grupos de fotos enviados a ${telefono}`);
+
+        console.log(
+          `📸 Múltiples grupos de fotos enviados a ${telefono}`
+        );
       } else {
         await procesarBloqueForotos(fotos);
-        console.log(`📸 Fotos enviadas a ${telefono}`);
+
+        console.log(
+          `📸 Fotos enviadas a ${telefono}`
+        );
       }
 
-      if (textoRespuesta && textoRespuesta.trim()) {
-        await new Promise(r => setTimeout(r, 1500));
+      if (
+        textoRespuesta &&
+        textoRespuesta.trim()
+      ) {
+        await new Promise(resolve =>
+          setTimeout(resolve, 1500)
+        );
+
         try {
-          await cliente.sendMessage(chatId, textoRespuesta);
-        } catch (eEnvio) {
-          console.error(`Envío directo falló (${eEnvio.message}) — intentando vía reply`);
-          await mensaje.reply(textoRespuesta);
+          await cliente.sendMessage(
+            chatId,
+            textoRespuesta
+          );
+        } catch (errorEnvio) {
+          console.error(
+            `Envío directo falló (${errorEnvio.message}) — intentando vía reply`
+          );
+
+          await mensaje.reply(
+            textoRespuesta
+          );
         }
       }
 
-      await chat.clearState();
       return;
-    } else {
-      try {
-        await cliente.sendMessage(chatId, respuesta);
-        console.log(`📤 Respuesta enviada a ${telefono}`);
-      } catch (eEnvio) {
-        // Plan B: los chats @lid a veces fallan con el envío directo pero aceptan reply
-        console.error(`Envío directo falló (${eEnvio.message}) — intentando vía reply`);
-        await mensaje.reply(respuesta);
-        console.log(`📤 Respuesta enviada vía reply (plan B) a ${telefono}`);
-      }
+    }
+
+    try {
+      await cliente.sendMessage(
+        chatId,
+        respuesta
+      );
+
+      console.log(
+        `📤 Respuesta enviada a ${telefono}`
+      );
+    } catch (errorEnvio) {
+      console.error(
+        `Envío directo falló (${errorEnvio.message}) — intentando vía reply`
+      );
+
+      await mensaje.reply(respuesta);
+
+      console.log(
+        `📤 Respuesta enviada vía reply (plan B) a ${telefono}`
+      );
     }
   } catch (error) {
-    console.error('Error procesando mensaje:', error.message);
-    if (error.stack) console.error('Traza:', error.stack.split('\n').slice(0, 5).join('\n'));
-    // Intentar avisar al cliente que hubo un problema (sin dejarlo sin respuesta)
-    const avisoError = 'Disculpa, tuvimos un problema técnico. ¿Podrías repetir tu mensaje? 😊';
+    console.error(
+      'Error procesando mensaje:',
+      error.message
+    );
+
+    if (error.stack) {
+      console.error(
+        'Traza:',
+        error.stack
+          .split('\n')
+          .slice(0, 5)
+          .join('\n')
+      );
+    }
+
+    const avisoError =
+      'Disculpa, tuvimos un problema técnico. ¿Podrías repetir tu mensaje? 😊';
+
     try {
-      await cliente.sendMessage(mensaje.from, avisoError);
-    } catch (e2) {
+      await cliente.sendMessage(
+        mensaje.from,
+        avisoError
+      );
+    } catch (errorEnvio) {
       try {
         await mensaje.reply(avisoError);
-      } catch (e3) {
-        console.error('No se pudo enviar mensaje de error al cliente:', e3.message);
+      } catch (errorReply) {
+        console.error(
+          'No se pudo enviar mensaje de error al cliente:',
+          errorReply.message
+        );
       }
     }
   } finally {
     procesandoCliente.delete(telefono);
-    try { if (chat) await chat.clearState(); } catch (e) {}
   }
 });
 
-console.log(`🚀 Iniciando bot...`);
-console.log(`🏨 Motel: ${process.env.MOTEL_NOMBRE || 'Sin configurar'}`);
+console.log('🚀 Iniciando bot...');
+
+console.log(
+  `🏨 Motel: ${process.env.MOTEL_NOMBRE || 'Sin configurar'}`
+);
+
 console.log(`🧩 Node: ${process.version}`);
-console.log(`🧩 whatsapp-web.js: ${require('whatsapp-web.js/package.json').version}`);
-console.log('🛠️ Corrección oficial de navegación: 942d236');
+
+console.log(
+  `🧩 whatsapp-web.js: ${require('whatsapp-web.js/package.json').version}`
+);
+
+console.log(
+  '🛠️ Corrección oficial de navegación: 942d236'
+);
+
 console.log('━'.repeat(50));
 
-// Puppeteer puede rechazar una promesa interna cuando WhatsApp Web navega o recarga.
-// Registrar el error y reiniciar el proceso evita dejar Express vivo con el bot muerto.
-process.on('unhandledRejection', (reason) => {
-  console.error('Error no manejado:', reason);
-  const detalle = reason?.stack || reason?.message || String(reason);
-  if (/Execution context was destroyed|TargetCloseError|Target closed|Protocol error/i.test(detalle)) {
-    programarReinicio('Puppeteer perdió el contexto de WhatsApp Web', 2500);
+// Si Puppeteer pierde el contexto de WhatsApp Web, Railway
+// reiniciará el proceso y recuperará la sesión persistente.
+process.on('unhandledRejection', reason => {
+  console.error(
+    'Error no manejado:',
+    reason
+  );
+
+  const detalle =
+    reason?.stack ||
+    reason?.message ||
+    String(reason);
+
+  if (
+    /Execution context was destroyed|TargetCloseError|Target closed|Protocol error/i.test(detalle)
+  ) {
+    programarReinicio(
+      'Puppeteer perdió el contexto de WhatsApp Web',
+      2500
+    );
   }
 });
 
-process.on('uncaughtException', (error) => {
-  console.error('Excepción no controlada:', error);
-  programarReinicio(error?.message || 'excepción no controlada', 2500);
-});
+process.on(
+  'uncaughtException',
+  error => {
+    console.error(
+      'Excepción no controlada:',
+      error
+    );
 
-cliente.initialize().catch(err => {
-  console.error('Error al iniciar:', err);
-  programarReinicio(`falló initialize(): ${err.message}`, 2500);
+    programarReinicio(
+      error?.message ||
+        'excepción no controlada',
+      2500
+    );
+  }
+);
+
+cliente.initialize().catch(error => {
+  console.error(
+    'Error al iniciar:',
+    error
+  );
+
+  programarReinicio(
+    `falló initialize(): ${error.message}`,
+    2500
+  );
 });
