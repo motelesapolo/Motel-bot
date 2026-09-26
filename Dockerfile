@@ -37,5 +37,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install --legacy-peer-deps
 COPY . .
+# Aplicar el fix del envío de imágenes de whatsapp-web.js (bug __x_id del 17-sept-2026)
+RUN node patch-wwebjs.js
 EXPOSE 3000
 CMD ["node", "index.js"]
