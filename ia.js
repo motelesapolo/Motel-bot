@@ -60,6 +60,10 @@ const reservasEnProgreso = new Map();
 const reservasConfirmadas = new Map();   // { id, googleEventId } por reservaId
 const bloqueosManuales = new Map();      // 'motel_tipo' → true (bloqueado manualmente)
 const tarifasEnviadas = new Set();       // teléfonos que ya recibieron la foto de tarifas
+const desayunoMencionado = new Set(); // teléfonos a los que ya se les envió el mensaje del desayuno premium
+const desayunoPendiente = new Set();  // teléfonos con mensaje de desayuno por enviar tras la confirmación
+const MENSAJE_DESAYUNO_PLANO = '☕ ¿Sabías que tenemos desayuno premium? Lo puedes pedir directamente en el motel.';
+const MENSAJE_DESAYUNO = '☕ *¿Sabías que tenemos desayuno premium? Lo puedes pedir directamente en el motel.*'; // negrita de WhatsApp
 const fotosEnviadasRecientes = new Map(); // telefono → Map("motel_tipo" → timestamp) para no reenviar las mismas fotos
 const disponibilidadConfirmada = new Map(); // telefono → {motel, tipo, fecha} disponibilidad ya confirmada
 const confirmacionesPendientes = new Map(); // telefono → número de veces que se ha pedido confirmación
@@ -243,7 +247,7 @@ SALUDO A USAR: "${saludo}, ¿en qué podemos ayudarte? 😊"
 - NUNCA EXPONGAS TU LÓGICA INTERNA: el cliente jamás debe ver cómo razonas ni las reglas internas del sistema. NUNCA escribas frases como "la hora actual es...", "aplica la regla de día/noche", "debo transferir", "según el sistema", ni expliques los rangos horarios internos (ej. "como es entre 9:00 y 22:59"). Da siempre la respuesta final limpia y natural, como lo haría una recepcionista. (SÍ puedes dar explicaciones útiles al cliente, como por qué una fecha es tarifa de fin de semana; lo que NUNCA debes hacer es narrar tu razonamiento o tus reglas internas.)
 - TONO: cordial y amable, pero NO exagerado. Sé cálido y educado, pero directo. Responde solo lo que te preguntan, con mensajes CORTOS y SIMPLES. No marees al cliente con párrafos largos ni con varios datos juntos que no pidió. Una respuesta clara y breve es mejor que una larga y recargada.
   Ejemplos:
-  ✅ "¿Tienen desayuno?" → "Solo el paquete de 24 horas incluye desayuno para 2 personas 😊" (NO agregar que se vende aparte, salvo que pregunte)
+  ✅ "¿Tienen desayuno?" → "Sí 😊 Tenemos desayuno premium a $10.900: 2 croissants de jamón queso, 2 jugos de naranja y 2 cafés o tés. Se pide en el motel. Y el paquete de 24 horas ya incluye desayuno para 2." (NO mencionar el desayuno de $7.000, salvo que pida algo más económico)
   ✅ "¿Tienen estacionamiento?" → "Sí, gratuito en Marín 021 😊" (NO agregar precios ni otra info)
   ❌ Responder una pregunta y agregar 2 o 3 datos más que no preguntó
 - NO ASUMIR: Nunca asumas que el cliente ya sabe algo. Si pregunta un precio, dalo. Si pregunta una dirección, dala. Si pregunta qué tipos de habitación hay, díselos. Siempre responde con la información completa cuando te la piden.
@@ -269,6 +273,7 @@ La propina es voluntaria 😊
 Tu reserva se mantendrá disponible hasta 45 minutos después de la hora acordada.
 
 IMPORTANTE: Los valores en MAYÚSCULAS (NÚMERO_RESERVA, NOMBRE_CLIENTE, etc.) deben ser reemplazados con los datos reales del RESULTADO_RESERVA. NUNCA enviar este formato con las palabras en mayúsculas sin reemplazar.
+Si el RESULTADO_RESERVA trae "lineaMejora", agrégala TAL CUAL como una línea propia justo después de la línea del precio.
 
 PRIORIDAD EN CADA CONVERSACIÓN:
 1. Resolver lo que el cliente pregunta
@@ -325,10 +330,12 @@ PAQUETE 24 HORAS:
 - Solo con reserva previa
 - Incluye desayuno para 2 personas
 
-DESAYUNO (solo si preguntan):
-- El paquete de 24 horas incluye desayuno para 2 personas
-- En los demás paquetes el desayuno NO está incluido, pero se puede comprar aparte a $7.000
-- Solo mencionar esta información si el cliente pregunta por el desayuno. No ofrecerlo de forma proactiva.
+DESAYUNO:
+- El paquete de 24 horas incluye desayuno para 2 personas.
+- DESAYUNO PREMIUM ($10.900): 2 croissants de jamón queso, 2 jugos boca ancha de naranja y 2 cafés o tés. Es el ÚNICO desayuno que promocionamos. NO se vende por WhatsApp: se pide estando en el motel.
+- También existe un desayuno simple de $7.000, pero NO lo promociones. Solo menciónalo si el cliente pide explícitamente una opción más económica.
+- Después de confirmar una reserva de NOCHE o 12 HORAS, el SISTEMA agrega automáticamente al final de la confirmación la línea: "☕ ¿Sabías que tenemos desayuno premium? Lo puedes pedir directamente en el motel." Tú NO la escribas ni la repitas.
+- El contenido y el precio del desayuno premium SOLO se dicen si el cliente se interesa (pregunta qué trae, cuánto vale o pregunta por desayuno).
 
 RECLAMOS Y CONTACTO DIRECTO:
 - Reclamos: servicioalcliente@motelesapolo.cl de lunes a viernes 9:00 a 17:00
@@ -343,19 +350,22 @@ RECLAMOS Y CONTACTO DIRECTO:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 TARIFA SEMANA (domingo 8:00 AM a viernes 7:59 AM):
-🏠 Simple:  3h $26.000 (PROMO SEPTIEMBRE) / 6x3 $29.000 | Noche $37.000 | 12h $37.000 | 24h $60.000
+🏠 Simple:  3h/6x3 $29.000 | Noche $37.000 | 12h $37.000 | 24h $60.000
 ⭐ VIP:     3h/6x3 $34.000 | Noche $44.000 | 12h $44.000 | 24h $70.000
 🛁 Jacuzzi: 3h/6x3 $42.000 | Noche $55.000 | 12h $55.000 | 24h $80.000
 
 TARIFA FIN DE SEMANA (viernes 8:00 AM a domingo 7:59 AM, y vísperas de feriado):
-🏠 Simple:  3h $26.000 (PROMO SEPTIEMBRE) / 6x3 $31.000 | Noche $41.000 | 12h $41.000 | 24h $60.000
+🏠 Simple:  3h/6x3 $31.000 | Noche $41.000 | 12h $41.000 | 24h $60.000
 ⭐ VIP:     3h/6x3 $39.000 | Noche $48.000 | 12h $48.000 | 24h $70.000
 🛁 Jacuzzi: 3h/6x3 $46.000 | Noche $58.000 | 12h $58.000 | 24h $80.000
 
-PROMOCIÓN DE SEPTIEMBRE 2026: La habitación SIMPLE por MOMENTO (3 horas) está a $26.000, TODOS los días y a TODA hora (mismo precio semana y fin de semana). Aplica SOLO a Simple 3 horas (no a 6x3, ni noche, ni 12h, ni 24h, ni a VIP o Jacuzzi).
-- Si el cliente pregunta por una habitación SIMPLE, o por precios de simple, MENCIONA esta promoción: "La Simple por 3 horas está en promoción a $26.000 este mes 😊".
-- La imagen de tarifas muestra el precio normal ($29.000/$31.000); la promo es un precio especial de septiembre más bajo. Al mencionarla, avísalo así para no confundir (igual que con las 12 horas).
-IMPORTANTE: El precio de 3h y 6x3 es fijo — no cambia según la hora del día. Solo varía entre semana y fin de semana (excepto la Simple 3h en promo, que es $26.000 todos los días).
+PROMOCIÓN SIMPLE 3 HORAS A $26.000 — SOLO SI EL CLIENTE PREGUNTA POR ELLA:
+- NUNCA la ofrezcas ni la menciones por iniciativa propia (ni al cotizar, ni al hablar de la Simple, ni al mandar tarifas). Solo habla de ella si el cliente pregunta por ESA promoción (ej: "¿y la promo de 26 mil?", "vi una promoción de la simple").
+- Cuando pregunte, sus condiciones son: habitación Simple, por 3 horas, de lunes a jueves, de 8:00 a 20:00.
+- Si el cliente reserva con esta promoción, agrega "promo26": true en [ACCION:crear_reserva]. El sistema valida las condiciones y cobra $26.000.
+- Si el cliente NO preguntó por la promoción, NO agregues "promo26": la Simple 3 horas se cobra a precio normal ($29.000 semana / $31.000 fin de semana).
+- Si el sistema responde PROMO26_NO_APLICA, explica amablemente que la promoción es de lunes a jueves de 8:00 a 20:00 y pregunta si quiere reservar a precio normal (si acepta, reenvía la acción con "promo26": false).
+IMPORTANTE: El precio de 3h y 6x3 es fijo — no cambia según la hora del día. Solo varía entre semana y fin de semana (la única excepción es la promoción Simple $26.000, que solo se aplica si el cliente la pide).
 NOTA: Noche y 12 horas tienen el mismo precio pero son paquetes distintos. Noche: entrada 22:00-12:00, salida siempre 12:00. 12 horas: 12h corridas desde cualquier hora.
 
 
@@ -366,8 +376,34 @@ Ejemplo: Simple semana 6x3 $29.000 → con 3 personas $58.000
 PROMOCIÓN 6x3 (EXCLUSIVA NUESTRA):
 - Pagas el valor de un momento (3h) y te quedas 6 horas (3 horas de regalo)
 - Aplica para TODO tipo de habitaciones
+- HORARIO (lo que se le dice al cliente): de domingo a jueves todo el día; viernes y sábado hasta las 16:00. SOLO si el cliente pregunta desde qué hora parte el viernes o el sábado, responder: "Los viernes y sábados la promo es desde las 8:00 hasta las 16:00 😊".
+- HORARIO INTERNO (solo para ti, NUNCA lo expliques así al cliente): la hora de LLEGADA debe estar entre el domingo 8:00 y el viernes 15:59 de corrido (incluye la madrugada del viernes), o el sábado de 8:00 a 15:59. NO hay 6x3 con llegada desde el viernes 16:00 hasta el sábado 7:59, ni desde el sábado 16:00 hasta el domingo 7:59.
+- Si la hora de llegada cae fuera de ese horario, NO ofrezcas el 6x3: ofrece 3 horas (con hasta 2 horas extra si necesita más tiempo), 12 horas, noche o 24 horas según corresponda.
+- Si el sistema responde PROMO_6X3_FUERA_DE_HORARIO, explica que la promo 6x3 los viernes y sábados es hasta las 16:00 y ofrece las otras opciones.
 - Puedes pedirla presencialmente, por WhatsApp o por nuestra página Motelink: motelesapolo.motelink.cl
 - Si no puedes reservar por Motelink, puedes hacerlo directamente por WhatsApp
+
+OPCIONES ESPECIALES PARA QUIEN RESERVA SIMPLE POR 3 HORAS O PROMO 6x3:
+- CUÁNDO: apenas el cliente decide reservar una habitación SIMPLE por 3 horas (momento) o con la promo 6x3 (también si viene por la promoción de $26.000), ANTES de crear la reserva y antes de pedirle el nombre si aún no lo tienes, ofrécele UNA sola vez estas dos opciones. Es la ÚNICA excepción a la regla de no ofrecer cosas por iniciativa propia.
+- ORDEN: si todavía faltan datos de la reserva, haz primero la oferta; cuando el cliente responda, pide en un solo mensaje SOLO los datos que falten (sin repetir los que ya dio).
+- NO aplica si eligió noche, 12 horas o 24 horas, ni si ya eligió VIP o Jacuzzi.
+- Si son 3 personas, los precios de ambas opciones también son el doble.
+- NUNCA uses palabras como "upselling", "upgrade" o "venta adicional". Preséntalo como opciones especiales.
+- Las dos opciones (usa los valores de su caso):
+  1) Cambiarse a VIP por solo $3.000 más que su Simple:
+     Simple con promo $26.000 → VIP por $29.000
+     Simple día de semana $29.000 → VIP por $32.000
+     Simple fin de semana $31.000 → VIP por $34.000
+  2) VIP a su precio normal ($34.000 día de semana / $39.000 fin de semana) con una botella de pisco sour GRATIS.
+- EL MENSAJE DE OFERTA SIEMPRE DEBE: (a) decir que por $3.000 más puede quedarse en una VIP, con su precio final; (b) decir que la otra opción es la VIP a precio normal con una botella de pisco sour gratis, con su precio final; (c) darle a ELEGIR entre esas dos opciones o seguir con su Simple. Nunca ofrezcas solo una de las dos.
+- Ejemplo (Simple día de semana $29.000): "¡Perfecto! Antes de dejarla lista, tengo dos opciones para ti: por solo $3.000 más puedes quedarte en una habitación VIP, quedando en $32.000. O puedes tomar la VIP a su precio normal de $34.000 y te llevas una botella de pisco sour gratis 🍾 ¿Cuál prefieres, o seguimos con la Simple? 😊"
+- Ejemplo (Simple con promo $26.000): "...por solo $3.000 más puedes quedarte en una VIP, quedando en $29.000. O la VIP a su precio normal de $34.000 con una botella de pisco sour gratis 🍾..."
+- Ejemplo (Simple fin de semana $31.000): "...por solo $3.000 más puedes quedarte en una VIP, quedando en $34.000. O la VIP a su precio normal de $39.000 con una botella de pisco sour gratis 🍾..."
+- CUANDO ACEPTA: confirma la opción elegida con su PRECIO FINAL. Si ya tienes todos los datos, crea la reserva de inmediato (la confirmación muestra el precio final). Si faltan datos, responde por ejemplo: "¡Genial! Quedas en una VIP por $32.000 😊 Para dejarla lista me falta tu nombre completo" (pidiendo solo lo que falte).
+- Si acepta la opción 1: en [ACCION:crear_reserva] usa el tipo VIP equivalente (vip_3h_... o vip_6x3_...) y agrega "upgrade": "vip3000". Si venía por la promo $26.000, mantén también "promo26": true.
+- Si acepta la opción 2: usa el tipo VIP equivalente y agrega "upgrade": "vip_pisco".
+- Si no le interesa: sigue con la Simple normalmente y NUNCA vuelvas a ofrecerlo en la conversación.
+- El precio lo calcula el sistema. Si no hay disponibilidad de VIP, discúlpate y sigue con la Simple a su precio original.
 
 PROMOCIÓN $22.000 de MotelNow:
 - Esta promoción es EXCLUSIVA de MotelNow, nosotros no la gestionamos
@@ -418,10 +454,12 @@ SERVICIO DE BAR A LA HABITACIÓN:
 - Copa de pisco sour
 - Botella de pisco sour
 
-SERVICIO DE COMIDA A LA HABITACIÓN:
-- Pizza familiar
-- Lasaña
+SERVICIO DE COMIDA A LA HABITACIÓN (NUNCA lo ofrezcas por iniciativa propia; SOLO responde si el cliente pregunta qué hay para comer. Se pide en el motel, no por WhatsApp):
+- Promo pizza: pizza familiar + 2 bebidas a elección, $11.900. Sabores: mechada cebolla, queso albahaca o pepperoni
+- Pizza familiar sola: $9.900 (mismos sabores)
+- Papas Kryzpo para picotear: $1.500
 - Bolsas de maní
+- Desayuno premium $10.900 (ver DESAYUNO)
 
 OTROS PRODUCTOS DISPONIBLES:
 - Shampoo y acondicionador (cobro aparte)
@@ -465,12 +503,13 @@ HORARIOS DE ESTADÍA:
 - VALOR NOCHE pasada la medianoche (después de las 00:00, o sea de la 01:00 en adelante): en vez de noche, sugerir 12 horas porque le conviene más (mismo precio, más tiempo, ya que la noche sale igual a las 12:00). Si el cliente prefiere noche igual, crearla sin problema.
 - 12 HORAS: 12 horas corridas desde cualquier hora. No ofrecerlas de la nada, PERO SÍ corresponde ofrecerlas cuando: (a) el cliente las menciona de cualquier forma ("12 horas", "12 hrs", "medio día"), o (b) su estadía necesita más de 6 horas. En esos casos las 12 horas SON la respuesta correcta, no una promoción.
 - IMPORTANTE: las 12 horas NO aparecen en la imagen de tarifas (la tabla solo muestra Momento, Noche y 24 horas). Por eso, cada vez que ofrezcas las 12 horas, AVISA de entrada que no está en la imagen, para no confundir. Ejemplo: "Para tu horario te conviene el paquete de 12 horas. No aparece en la tabla porque tiene el mismo precio que la noche, pero es un paquete distinto: 12 horas corridas desde que llegues 😊". Así evitas que el cliente se confunda al no verlo en la imagen.
-- 3 HORAS y 6x3: cualquier hora, sin cambios.
+- 3 HORAS: cualquier hora. 6x3: solo con llegada dentro de su horario (ver PROMOCIÓN 6x3).
 - REGLA DE COBERTURA (MUY IMPORTANTE): si el cliente indica hora de llegada Y hora de salida, CALCULA cuántas horas se queda y ofrece SOLO paquetes que CUBRAN esa estadía completa. NUNCA ofrezcas un paquete más corto que las horas que el cliente dijo que se queda. Ejemplos:
   ✅ Llega 00:00 y sale 9:00 = 9 horas → ofrecer 12 horas (3h y 6x3 NO alcanzan)
   ✅ Llega 19:00 y sale 9:00 = 14 horas → ofrecer 12 HORAS + 2 HORAS EXTRA (NO el paquete de 24 horas: sale más caro)
 - ESTADÍAS QUE SUPERAN LAS 12 HORAS: el máximo es 2 horas extra por estadía, así que 12 horas + extras cubre hasta 14 horas. Si la estadía es de 13 o 14 horas → ofrecer 12 HORAS + las horas extra necesarias (valor por hora extra: $5.000 Simple / $6.000 VIP / $7.000 Jacuzzi). Si la estadía es de 15 horas o más → la única opción es el paquete de 24 HORAS.
   ✅ Llega 15:00 y sale 19:00 = 4 horas → ofrecer 6x3 (3h no alcanza)
+  ✅ Si la llegada está FUERA del horario del 6x3 (ej: viernes 18:00): 4 o 5 horas → 3 horas + horas extra; 6 a 12 horas → 12 horas
   ✅ Llega 14:00 y sale 16:00 = 2 horas → ofrecer 3h
   ❌ NUNCA: llega 00:00 y sale 9:00 → ofrecer "3h o la promo 6x3" (no cubren las 9 horas)
 - 24 HORAS: cualquier hora, sin cambios. El paquete de 24 horas SOLO se ofrece o reserva cuando el cliente dice EXPLÍCITAMENTE "24 horas" (o "un día completo" y lo confirma).
@@ -551,6 +590,10 @@ MODIFICACIÓN Y CANCELACIÓN DE RESERVAS:
      Ejemplo: {"fechaInicio": "2026-07-05T22:00:00", "tipo": "vip_noche_semana", "esModificacion": true, "reservaIdAnterior": "123456"}
    - Si el cliente dice "todo igual" o solo cambia la hora/fecha, NUNCA vuelvas a preguntar el tipo, nombre o motel: el sistema ya los tiene.
 4. El sistema borrará la reserva anterior de Google Calendar, aplicará los cambios, recalculará el precio correcto y mantendrá el MISMO número de reserva
+5. CONFIRMAR ANTES DE MODIFICAR cuando el cambio perjudica al cliente:
+   - Si la reserva tiene una mejora (VIP por $3.000 más, o VIP con pisco sour gratis) y el cliente la cambia a una duración o tipo donde la mejora no aplica (noche, 12 horas, 24 horas o Jacuzzi), NO apliques el cambio todavía. Primero explícale que la mejora/regalo es solo para VIP por 3 horas o 6x3 y dile el precio nuevo. Si lo que cambia es la DURACIÓN, pregúntale si la deja en VIP o vuelve a la Simple, con el precio de cada una. Si lo que pide es Jacuzzi, dile el precio de la Jacuzzi y pide confirmación. Recién cuando confirme, ejecuta la modificación con "upgrade": null y el tipo elegido.
+     Ejemplo (VIP con pisco, viernes, pide 12 horas): "En 12 horas la VIP queda en $48.000 y la botella de pisco sour de regalo aplica solo a reservas por 3 horas. ¿La dejo en VIP o prefieres volver a la Simple por $41.000? 😊"
+   - En cualquier otra modificación que SUBA el precio, dile el precio nuevo y pide confirmación antes de aplicarla. Si el precio baja o se mantiene, aplícala directo.
 - Si el cliente tiene más de una reserva, preguntarle el número de la reserva que desea modificar o cancelar
 
 LLEGADA TARDE: Si un cliente dice que llegará más tarde de la hora reservada:
@@ -644,7 +687,7 @@ ${!esSinAgente() ?
 -Sucursal en la cual deseas reservar"
 4. RESPUESTAS PARCIALES: si el cliente entrega solo algunos datos, NO repitas la lista completa. Pide SOLO los que falten, agrupados en un solo mensaje (ej: "¡Gracias! Solo me falta la hora de llegada y el tipo de habitación 😊"). NUNCA vuelvas a preguntar un dato que el cliente ya dio.
 5. INTERRUPCIONES: si a mitad de la recolección el cliente hace OTRA pregunta (estacionamiento, precios, duración, fotos, lo que sea), responde su pregunta normalmente y al final recuérdale brevemente SOLO los datos que aún faltan (ej: "...😊 Cuando quieras, me pasas tu nombre completo y la hora de llegada para dejar la reserva lista"). NUNCA repitas la lista completa ni pierdas los datos que ya entregó.
-6. Al pedir o aclarar la DURACIÓN, nombrar SIEMPRE las CUATRO opciones: 3 horas, promo 6x3, noche y 24 horas. NUNCA omitas la noche.
+6. Al pedir o aclarar la DURACIÓN, nombrar SIEMPRE las CUATRO opciones: 3 horas, promo 6x3, noche y 24 horas. NUNCA omitas la noche. Única excepción: si ya sabes que la hora de llegada está fuera del horario del 6x3, no lo nombres.
    ❌ MAL: "¿momento, 6x3 o 24 horas?" (falta la noche)
    ✅ BIEN: "¿3 horas, la promo 6x3, noche o 24 horas?"
    Las 12h no se ofrecen de la nada, pero SÍ cuando el cliente las menciona o cuando su estadía necesita más de 6 horas (regla de cobertura)
@@ -744,11 +787,12 @@ REGLAS:
 }
 
 // ── Tabla de precios y duraciones ────────────────────────────
+// Promo Simple 3h a $26.000: lunes a jueves, llegada 8:00-19:59, SOLO si el cliente la pide ("promo26": true).
+// Se aplica en crear_reserva; en la tabla queda el precio normal.
+const PRECIO_PROMO_SIMPLE_3H = 26000;
 const PRECIOS = {
-  // PROMO SEPTIEMBRE 2026: Simple 3h (Momento) a $26.000 todos los días. Revertir el 1 de octubre:
-  //   simple_3h_semana original 29000 | simple_3h_finde original 31000
-  simple_3h_semana: 26000, simple_6x3_semana: 29000, simple_noche_semana: 37000, simple_12h_semana: 37000, simple_24h: 60000,
-  simple_3h_finde:  26000, simple_6x3_finde:  31000, simple_noche_finde:  41000, simple_12h_finde: 41000,
+  simple_3h_semana: 29000, simple_6x3_semana: 29000, simple_noche_semana: 37000, simple_12h_semana: 37000, simple_24h: 60000,
+  simple_3h_finde:  31000, simple_6x3_finde:  31000, simple_noche_finde:  41000, simple_12h_finde: 41000,
   vip_3h_semana:    34000, vip_6x3_semana:    34000, vip_noche_semana:    44000, vip_12h_semana: 44000, vip_24h: 70000,
   vip_3h_finde:     39000, vip_6x3_finde:     39000, vip_noche_finde:     48000, vip_12h_finde: 48000,
   jacuzzi_3h_semana: 42000, jacuzzi_6x3_semana: 42000, jacuzzi_noche_semana: 55000, jacuzzi_12h_semana: 55000, jacuzzi_24h: 80000,
@@ -827,6 +871,11 @@ async function notificarEmpresa(datos, result, tipo, precio, duracionHoras, tele
       `🛏️ Tipo: ${tipoLabel}`,
       `👥 Personas: ${datos.personas || 2}`,
       `💰 Precio: $${precio.toLocaleString('es-CL')} CLP`,
+      ...(datos.upgrade === 'vip3000' ? [`🔼 MEJORA ACEPTADA: el cliente se cambió de Simple a VIP por $3.000 más`] : []),
+      ...(datos.upgrade === 'vip_pisco' ? [`🍾 MEJORA ACEPTADA: VIP a precio normal con BOTELLA DE PISCO SOUR DE REGALO (entregar al llegar)`] : []),
+      ...(datos.esModificacion && datos._upgradeOriginal && datos.upgrade !== datos._upgradeOriginal
+        ? [`⚠️ CAMBIO: esta reserva YA NO incluye ${datos._upgradeOriginal === 'vip_pisco' ? 'la botella de pisco sour de regalo' : 'la mejora a VIP por $3.000 más'}`]
+        : []),
       `🕐 Llegada: ${inicioSantiago}`,
       `🕑 Salida est.: ${finSantiago}`,
       `⏳ Esperar hasta: 30 min después de la llegada`,
@@ -869,16 +918,53 @@ async function procesarAccion(accion, datos, telefono) {
         const _idOrig = datos.reservaIdAnterior || reservasEnProgreso.get(telefono);
         const _orig = _idOrig ? reservasConfirmadas.get(_idOrig) : null;
         if (_orig) {
+          const _tipoPedido = (datos.tipo || '').toLowerCase(); // tipo que el cliente pidió explícitamente (vacío = no lo cambió)
           if ((!datos.tipo || datos.tipo === '') && _orig.tipoInterno) datos.tipo = _orig.tipoInterno;
           if ((!datos.fechaInicio || datos.fechaInicio === '') && _orig.fechaInicio) datos.fechaInicio = _orig.fechaInicio;
           if ((!datos.nombre || datos.nombre === '') && _orig.nombre) datos.nombre = _orig.nombre;
           if ((!datos.motel || datos.motel === '') && _orig.motel) datos.motel = _orig.motel;
+          // Mejora a VIP: se hereda de la original, SALVO que el cliente haya elegido explícitamente
+          // un tipo que no es VIP (ej: "vuelvo a la Simple"). "upgrade": null la quita.
+          let _upgOrig = _orig.upgrade || null;
+          if (!_upgOrig) {
+            const _lbl = (_orig.tipoLabel || '').toLowerCase(); // reservas recargadas desde Sheets
+            if (_lbl.includes('mejora vip')) _upgOrig = 'vip3000';
+            else if (_lbl.includes('pisco sour')) _upgOrig = 'vip_pisco';
+          }
+          datos._upgradeOriginal = _upgOrig; // para avisar al hotel si la mejora se pierde
+          if (datos.upgrade === undefined && _upgOrig && (!_tipoPedido || _tipoPedido.startsWith('vip_'))) {
+            datos.upgrade = _upgOrig;
+          }
+          // Promo $26.000: si la original la tenía y el modelo no dijo nada, se hereda
+          // (se vuelve a validar con la fecha nueva). "promo26": false la quita.
+          if (datos.promo26 === undefined) {
+            const P = PRECIO_PROMO_SIMPLE_3H;
+            const _precioOrig = Number(String(_orig.precio || '').replace(/\D/g, ''));
+            const _tipoOrig = (_orig.tipoInterno || '').toLowerCase();
+            const _lblOrig = (_orig.tipoLabel || '').toLowerCase();
+            const _origTeniaPromo = _orig.promo26 === true ||
+              (_tipoOrig.startsWith('simple_3h') && [P, P * 2].includes(_precioOrig)) ||
+              (_tipoOrig.startsWith('vip_3h') && _lblOrig.includes('mejora vip') && [P + 3000, (P + 3000) * 2].includes(_precioOrig));
+            // Solo se hereda si el cliente no cambió a un tipo/duración donde la promo no aplica
+            const _tipoCompatible = !_tipoPedido || _tipoPedido.startsWith('simple_3h') ||
+              (_tipoPedido.startsWith('vip_3h') && datos.upgrade === 'vip3000');
+            if (_origTeniaPromo && _tipoCompatible) datos.promo26 = true;
+          }
           console.log(`🔧 Modificación reserva ${_idOrig}: base original + cambios → tipo=${datos.tipo}, fecha=${datos.fechaInicio}`);
         }
       }
       // VALIDACIÓN: no crear reserva sin datos esenciales (especialmente la hora)
       if (!datos.fechaInicio || !datos.nombre || !datos.tipo) {
         return `RESULTADO_RESERVA: {"ok": false, "error": "DATOS_INCOMPLETOS", "mensaje": "Falta la hora de llegada, el nombre o el tipo de habitación. Pedir el dato faltante antes de crear."}`;
+      }
+      // MEJORA A VIP (oferta para Simple 3h/6x3): "vip3000" = VIP por $3.000 más que la Simple;
+      // "vip_pisco" = VIP a precio normal con botella de pisco sour de regalo.
+      if (datos.upgrade !== 'vip3000' && datos.upgrade !== 'vip_pisco') datos.upgrade = null;
+      if (datos.upgrade) {
+        if (/^simple_/.test(datos.tipo || '')) datos.tipo = datos.tipo.replace(/^simple_/, 'vip_');
+        if (!/^vip_(3h|6x3)/.test(datos.tipo || '')) {
+          return `RESULTADO_RESERVA: {"ok": false, "error": "MEJORA_NO_APLICA", "mensaje": "La mejora a VIP solo aplica a reservas por 3 horas o promo 6x3. NO reenvíes la acción todavía: explica al cliente que la mejora o regalo ya no aplicaría con ese cambio, dile el precio de la nueva duración en VIP y en Simple, y pregúntale cuál prefiere. Cuando elija, reenvía con upgrade en null y el tipo elegido."}`;
+        }
       }
       // Validar que el nombre tenga al menos nombre y apellido (2 palabras)
       const palabrasNombre = datos.nombre.trim().split(/\s+/).filter(p => p.length >= 2).length;
@@ -934,6 +1020,19 @@ async function procesarAccion(accion, datos, telefono) {
         // 22:00-23:59 y 00:00-11:59 → aceptar noche directamente
       }
 
+      // PROMO 6x3: solo con llegada dentro de su horario.
+      // Válido: domingo 8:00 → viernes 15:59 (de corrido) y sábado 8:00 → 15:59.
+      if ((datos.tipo || '').toLowerCase().includes('6x3')) {
+        const _dia6 = _localCheck.getDay(); // 0=dom ... 5=vie 6=sab
+        const _ok6x3 = (_dia6 === 0 && _minTotalCheck >= 8*60) ||
+                       (_dia6 >= 1 && _dia6 <= 4) ||
+                       (_dia6 === 5 && _minTotalCheck < 16*60) ||
+                       (_dia6 === 6 && _minTotalCheck >= 8*60 && _minTotalCheck < 16*60);
+        if (!_ok6x3) {
+          return `RESULTADO_RESERVA: {"ok": false, "error": "PROMO_6X3_FUERA_DE_HORARIO", "mensaje": "La promo 6x3 no está disponible para esa hora de llegada. Decir al cliente que los viernes y sábados la promo es hasta las 16:00 y ofrecer 3 horas (con horas extra si necesita), 12 horas, noche o 24 horas."}`;
+        }
+      }
+
       // Corregir tipo automáticamente según fecha real Santiago
       let tipo = datos.tipo || 'simple_3h_semana';
       const fechaLlegada = parsearFechaSantiago(datos.fechaInicio);
@@ -949,8 +1048,32 @@ async function procesarAccion(accion, datos, telefono) {
       }
       const duracionHoras = DURACIONES[tipo] || 3;
       let precio = PRECIOS[tipo] || 29000;
+      // PROMO SIMPLE 3H $26.000: solo si el cliente la pidió ("promo26": true).
+      // Condiciones: Simple 3 horas, llegada lunes a jueves de 8:00 a 19:59.
+      let promo26Aplicada = false;
+      const upgrade = datos.upgrade || null;
+      if (datos.promo26 === true && upgrade !== 'vip_pisco') {
+        const _diaP = _localCheck.getDay();
+        const _es3h = tipo.startsWith('simple_3h') || (upgrade === 'vip3000' && tipo.startsWith('vip_3h'));
+        const _okPromo = _es3h && _diaP >= 1 && _diaP <= 4 &&
+                         _minTotalCheck >= 8*60 && _minTotalCheck < 20*60;
+        if (!_okPromo) {
+          return `RESULTADO_RESERVA: {"ok": false, "error": "PROMO26_NO_APLICA", "mensaje": "La promoción Simple de $26.000 es solo para habitación Simple por 3 horas, de lunes a jueves de 8:00 a 20:00. Explicarlo amablemente y preguntar si quiere reservar a precio normal; si acepta, reenviar la acción con promo26 en false."}`;
+        }
+        precio = PRECIO_PROMO_SIMPLE_3H;
+        promo26Aplicada = true;
+      }
+      if (upgrade === 'vip3000') {
+        const _simpleEq = tipo.replace(/^vip_/, 'simple_');
+        precio = (promo26Aplicada ? PRECIO_PROMO_SIMPLE_3H : (PRECIOS[_simpleEq] || 29000)) + 3000;
+      } else if (upgrade === 'vip_pisco') {
+        precio = PRECIOS[tipo] || precio;
+      }
       const personas = datos.personas || 2;
       if (personas === 3) precio = precio * 2;
+      let lineaMejora = '';
+      if (upgrade === 'vip3000') lineaMejora = `⭐ Mejora: habitación VIP por $3.000 más (total $${precio.toLocaleString('es-CL')})`;
+      else if (upgrade === 'vip_pisco') lineaMejora = `🍾 Regalo: botella de pisco sour gratis con tu VIP de $${precio.toLocaleString('es-CL')} (se entrega en el motel)`;
 
       // Verificación de disponibilidad ÚNICA y correcta (con motel y tipo, y duración ya corregida).
       // Solo se confía en una disponibilidad previa si es para LA MISMA habitación y fecha (evita sobrecupo).
@@ -986,7 +1109,9 @@ async function procesarAccion(accion, datos, telefono) {
         }
       }
 
-      const tipoLabel = tipo.replace(/_/g, ' ').replace('semana','(semana)').replace('finde','(fin de semana)');
+      let tipoLabel = tipo.replace(/_/g, ' ').replace('semana','(semana)').replace('finde','(fin de semana)');
+      if (upgrade === 'vip3000') tipoLabel += ' · mejora VIP +$3.000';
+      else if (upgrade === 'vip_pisco') tipoLabel += ' · VIP con pisco sour de regalo';
       const result = await crearReserva({
         nombre: datos.nombre,
         telefono: telefono, // Siempre usar el teléfono real de WhatsApp
@@ -1007,7 +1132,22 @@ async function procesarAccion(accion, datos, telefono) {
           nombre: datos.nombre,
           motel: datos.motel || 'Apolo',
           duracionHoras,
+          fechaInicio: datos.fechaInicio, // para modificaciones que solo cambian tipo/motel
+          precio,
+          promo26: promo26Aplicada,
+          upgrade,
         });
+        // Desayuno premium: línea al final de la confirmación, solo noche o 12 horas, una vez por conversación
+        if (/_(noche|12h)_/.test(tipo)) {
+          if (!desayunoMencionado.has(telefono)) {
+            desayunoMencionado.add(telefono);
+            desayunoPendiente.add(telefono);
+          }
+        } else if (desayunoPendiente.has(telefono)) {
+          // la reserva cambió a una duración que no corresponde antes de mostrarse: descartar
+          desayunoPendiente.delete(telefono);
+          desayunoMencionado.delete(telefono);
+        }
         const tipoBase = tipo.replace(/_semana$|_finde$|_24h$/, '').replace(/_noche$/, '');
         preferenciaCliente.set(telefono, tipoBase);
         await notificarEmpresa(datos, result, tipo, precio, duracionHoras, telefono);
@@ -1019,7 +1159,7 @@ Datos: ${datos.motel} | ${tipoLabel} | ${datos.fechaInicio} | $${precio.toLocale
           );
         }
       }
-      return `RESULTADO_RESERVA: ${JSON.stringify({ ...result, precio, nocheAjustada: datos._nocheAjustada || false })}`;
+      return `RESULTADO_RESERVA: ${JSON.stringify({ ...result, precio, nocheAjustada: datos._nocheAjustada || false, lineaMejora: lineaMejora || undefined })}`;
     }
     case 'cancelar_reserva': {
       const result = await cancelarReserva(datos.reservaId);
@@ -1197,6 +1337,8 @@ async function procesarMensaje(telefono, mensajeUsuario, numeroPrueba = null) {
     reservasEnProgreso.delete(telefono);
     tarifasEnviadas.delete(telefono);
     fotosEnviadasRecientes.delete(telefono);
+    desayunoMencionado.delete(telefono);
+    desayunoPendiente.delete(telefono);
     disponibilidadConfirmada.delete(telefono);
     confirmacionesPendientes.delete(telefono);
     console.log(`⏰ Conversación de ${telefono} limpiada por inactividad`);
@@ -1397,7 +1539,8 @@ const PALABRAS_NO_CONFIRMACION = ['con débito','con debito','con crédito','con
     // Es nombre si: el bot acaba de pedirlo, no es pregunta/comando/cortesía, y tiene largo razonable (2-5 palabras)
     const palabrasMsg = msgLimpio.split(/\s+/).length;
     const dioNombre = ultimoBotPidioNombre && !esPregunta && !esComando && !esCortesia && palabrasMsg >= 2 && palabrasMsg <= 5 && msgLimpio.length >= 5;
-    const seQuedoPegado = dioNombre && !ejecutoCrear && !dijoConfirmada && !reservasEnProgreso.has(telefono) && !textoRespuesta.includes('[ACCION:');
+    const esOfertaMejora = /vip/i.test(textoRespuesta) && /pisco sour/i.test(textoRespuesta) && !reservasEnProgreso.has(telefono);
+    const seQuedoPegado = dioNombre && !ejecutoCrear && !dijoConfirmada && !esOfertaMejora && !reservasEnProgreso.has(telefono) && !textoRespuesta.includes('[ACCION:');
 
     if ((dijoConfirmada && !ejecutoCrear && !reservasEnProgreso.has(telefono)) || seQuedoPegado) {
       console.log(`⚠️ ${seQuedoPegado ? 'Bot pegado tras recibir nombre' : 'Confirmación falsa'} para ${telefono} — forzando creación real`);
@@ -1445,17 +1588,24 @@ const PALABRAS_NO_CONFIRMACION = ['con débito','con debito','con crédito','con
     if (!textoRespuesta.includes('[ACCION:')) {
       console.log(`💬 IA respondió SIN ejecutar acciones para ${telefono}`);
     }
-    historial.push({ role: 'assistant', content: respuestaLimpia });
+    // Desayuno premium: solo si en esta respuesta realmente salió la confirmación
+    // (si en este turno no salió la confirmación, queda pendiente para cuando salga)
+    let textoAparte = '';
+    if (desayunoPendiente.has(telefono) && respuestaLimpia && /Reserva (confirmada|modificada)/i.test(respuestaLimpia)) {
+      desayunoPendiente.delete(telefono);
+      textoAparte = MENSAJE_DESAYUNO;
+    }
+    historial.push({ role: 'assistant', content: respuestaLimpia + (textoAparte ? '\n\n' + MENSAJE_DESAYUNO_PLANO : '') }); // sin asteriscos para no inducir negritas al modelo
     conversaciones.set(telefono, historial.slice(-40));
 
     // Si hay tarifas, retornar objeto con tarifas
     if (fotosParaEnviar?.tarifas) {
       tarifasEnviadas.add(telefono);
-      return { texto: respuestaLimpia, tarifas: true };
+      return { texto: respuestaLimpia + (textoAparte ? '\n\n' + textoAparte : ''), tarifas: true };
     }
     // Si hay fotos, retornar objeto con texto + info de fotos
-    if (fotosParaEnviar) return { texto: respuestaLimpia, fotos: fotosParaEnviar };
-    return respuestaLimpia;
+    if (fotosParaEnviar) return { texto: respuestaLimpia + (textoAparte ? '\n\n' + textoAparte : ''), fotos: fotosParaEnviar };
+    return textoAparte ? respuestaLimpia + '\n\n' + textoAparte : respuestaLimpia;
 
   } catch (error) {
     console.error('Error en IA:', error.message);
@@ -1481,6 +1631,8 @@ function limpiarConversacion(telefono) {
   ultimaActividad.delete(telefono);
   tarifasEnviadas.delete(telefono);
   fotosEnviadasRecientes.delete(telefono);
+  desayunoMencionado.delete(telefono);
+  desayunoPendiente.delete(telefono);
   disponibilidadConfirmada.delete(telefono);
   confirmacionesPendientes.delete(telefono);
 }
